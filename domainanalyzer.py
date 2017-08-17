@@ -11,7 +11,7 @@ from dns import resolver , zone, query
 # supress traceback information on errors
 sys.tracebacklimit = 0
 
-# TODO:
+# TODO: Highlight important information
 
 # get domain from input arguments
 domain = sys.argv[1]
