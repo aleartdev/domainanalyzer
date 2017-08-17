@@ -1,2 +1,2 @@
-dnspython==1.16.0
+dnspython==1.15.0
 pythonwhois==2.4.3

@@ -7,9 +7,10 @@ import pythonwhois
 import socket
 from datetime import *
 from dns import resolver , zone, query
+import subprocess
 
 # supress traceback information on errors
-sys.tracebacklimit = 0
+sys.tracebacklimit = 1
 
 # TODO: Highlight important information
 
@@ -72,18 +73,7 @@ if len(sys.argv) > 1:
     else:
         print 'COMPANY: N/A'
 
-    # get zone (MX)
-    print('ZONE:')
-    zone = zone.from_xfr(query.xfr(whois['nameservers'][0], domain))
-    print('A:')
-    for (name, ttl, rdata) in zone.iterate_rdatas('A'):
-        print("\t{} {} TTL: {} ").format(name, rdata, ttl)
-    print('MX:')
-    for (name, ttl, rdata) in zone.iterate_rdatas('MX'):
-        print("\t{} {} TTL: {} ").format(name, rdata, ttl)
-    print('TXT:')
-    for (name, ttl, rdata) in zone.iterate_rdatas('TXT'):
-        print("\t{} {} TTL: {} ").format(name, rdata, ttl)
+    print('MX: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'MX', domain]).strip()))
 
     # open domain in browser
     webbrowser.open('http://' + domain)
