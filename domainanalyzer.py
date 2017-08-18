@@ -13,6 +13,7 @@ import subprocess
 sys.tracebacklimit = 1
 
 # TODO: Highlight important information
+# TODO: This line is add from work to test conflict in git commits.
 
 # get domain from input arguments
 domain = sys.argv[1]
