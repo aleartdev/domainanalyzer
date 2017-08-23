@@ -75,6 +75,7 @@ if len(sys.argv) > 1:
         print 'COMPANY: N/A'
 
     print('MX: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'MX', domain]).strip()))
+    print('TXT: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'TXT', domain]).strip()))
 
     # open domain in browser
     webbrowser.open('http://' + domain)
