@@ -40,8 +40,11 @@ if len(sys.argv) > 1:
     exp = '' if daysleft > 66 else 'Exp ' + whois['expiration_date'][0].strftime("%Y-%m-%d") + ' (' + str(daysleft) + ' days left)'
 
     # calculate hours ago
-    hoursago = round((datetime.now().date() - whois['updated_date'][0].date()).total_seconds() / 3600)
-    mod = '' if hoursago > 48 else 'Mod ' + whois['updated_date'][0].strftime("%Y-%m-%d") + " (%g hours ago)" % round(hoursago,0)
+    try:
+        hoursago = round((datetime.now().date() - whois['updated_date'][0].date()).total_seconds() / 3600)
+        mod = '' if hoursago > 48 else 'Mod ' + whois['updated_date'][0].strftime("%Y-%m-%d") + " (%g hours ago)" % round(hoursago,0)
+    except KeyError:
+        mod = 'Mod: N/A'
 
     print 'STATUS: ' + ' '.join(whois['status'])
     if mod: print mod
