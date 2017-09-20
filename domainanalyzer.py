@@ -5,6 +5,7 @@ import sys
 import webbrowser
 import pythonwhois
 import socket
+import dns
 from datetime import *
 from dns import resolver , zone, query
 import subprocess
@@ -53,35 +54,45 @@ if len(sys.argv) > 1:
     print 'DNS: ' + ' '.join(whois['nameservers'])
 
     # get ip from domain
-    answers = res.query(domain)
-    for rdata in answers:
-        ips.append(rdata.address)
-    print 'IP ' + ' / '.join(ips)
-
-    # get host from ip
     try:
-        host = socket.gethostbyaddr(ips[0])
-        print 'HOST: ' + host[0]
-    except socket.error:
-        print 'HOST: N/A'
-    pass
+        answers = res.query(domain)
+        for rdata in answers:
+            ips.append(rdata.address)
+        print 'IP ' + ' / '.join(ips)
 
-    # get name from ip
-    whois2 = pythonwhois.get_whois(ips[0], True)
-    if 'netname:' in str(whois2['raw']):
-        tail = str(whois2['raw']).split("netname:",1)
-        if tail:
-            tail = tail[1]
-            name=tail.split('\\')[0].strip()
-            print 'COMPANY: ' +name
-    else:
-        print 'COMPANY: N/A'
+        # get host from ip
+        try:
+            host = socket.gethostbyaddr(ips[0])
+            print 'HOST: ' + host[0]
+        except socket.error:
+            print 'HOST: N/A'
+        pass
+
+        # get name from ip
+        whois2 = pythonwhois.get_whois(ips[0], True)
+        if 'netname:' in str(whois2['raw']):
+            tail = str(whois2['raw']).split("netname:",1)
+            if tail:
+                tail = tail[1]
+                name=tail.split('\\')[0].strip()
+                print 'COMPANY: ' +name
+        else:
+            print 'COMPANY: N/A'
+
+    except dns.resolver.NXDOMAIN:
+        print "No such domain %s" % args.host
+    except dns.resolver.Timeout:
+        print "Timed out while resolving %s" % args.host
+    except dns.exception.DNSException:
+        print "Unhandled exception"
+        #https://stackoverflow.com/questions/9245067/is-it-reasonable-in-python-to-check-for-a-specific-type-of-exception-using-isins
 
     print('MX: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'MX', domain]).strip()))
     print('TXT: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'TXT', domain]).strip()))
 
     # open domain in browser
     webbrowser.open('http://' + domain)
+    webbrowser.open('https://builtwith.com/' + domain)
 
 # if you want to do anything cool with a keyword
 if len(sys.argv) > 2:
