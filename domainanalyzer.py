@@ -58,14 +58,14 @@ if len(sys.argv) > 1:
         answers = res.query(domain)
         for rdata in answers:
             ips.append(rdata.address)
-        print 'IP ' + ' / '.join(ips)
+        print 'HOST IP: ' + ' / '.join(ips)
 
         # get host from ip
         try:
             host = socket.gethostbyaddr(ips[0])
-            print 'HOST: ' + host[0]
+            print 'HOST PTR: ' + host[0]
         except socket.error:
-            print 'HOST: N/A'
+            print 'HOST PTR: N/A'
         pass
 
         # get name from ip
