@@ -58,14 +58,14 @@ if len(sys.argv) > 1:
         answers = res.query(domain)
         for rdata in answers:
             ips.append(rdata.address)
-        print 'HOST IP: ' + ' / '.join(ips)
+        print 'IP ' + ' / '.join(ips)
 
         # get host from ip
         try:
             host = socket.gethostbyaddr(ips[0])
-            print 'HOST PTR: ' + host[0]
+            print 'HOST: ' + host[0]
         except socket.error:
-            print 'HOST PTR: N/A'
+            print 'HOST: N/A'
         pass
 
         # get name from ip
@@ -91,8 +91,8 @@ if len(sys.argv) > 1:
     print('TXT: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'TXT', domain]).strip()))
 
     # open domain in browser
-    webbrowser.open('http://' + domain)
-    webbrowser.open('https://builtwith.com/' + domain)
+    #webbrowser.open('http://' + domain)
+    #webbrowser.open('https://builtwith.com/' + domain)
 
 # if you want to do anything cool with a keyword
 if len(sys.argv) > 2:
