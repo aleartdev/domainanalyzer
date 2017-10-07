@@ -16,7 +16,7 @@ sys.tracebacklimit = 1
 # TODO: This line is add from work to test conflict in git commits.
 
 # get domain from input arguments
-domain = sys.argv[1]
+domain = 'davidfreiholtz.com'#sys.argv[1]
 
 # strip extra domain information
 if '//' in domain:
@@ -46,24 +46,24 @@ if len(sys.argv) > 1:
     except KeyError:
         mod = 'Mod: N/A'
 
-    print 'STATUS: ' + ' '.join(whois['status'])
-    if mod: print mod
-    if exp: print exp
-    print 'REG: ' + ' '.join(whois['registrar'])
-    print 'DNS: ' + ' '.join(whois['nameservers'])
+    print('STATUS: {}'.format(' '.join(whois['status'])))
+    if mod: print(mod)
+    if exp: print(exp)
+    print('REG: {}'.format(' '.join(whois['registrar'])))
+    print('DNS: {}'.format(' '.join(whois['nameservers'])))
 
     # get ip from domain
     answers = res.query(domain)
     for rdata in answers:
         ips.append(rdata.address)
-    print 'IP ' + ' / '.join(ips)
+    print('IP: {}'.format(' / '.join(ips)))
 
     # get host from ip
     try:
         host = socket.gethostbyaddr(ips[0])
-        print 'HOST: ' + host[0]
+        print('HOST: {}'.format(host[0]))
     except socket.error:
-        print 'HOST: N/A'
+        print('HOST: N/A')
     pass
 
     # get name from ip
@@ -73,15 +73,15 @@ if len(sys.argv) > 1:
         if tail:
             tail = tail[1]
             name=tail.split('\\')[0].strip()
-            print 'COMPANY: ' +name
+            print('COMPANY: {}'.format(name))
     else:
-        print 'COMPANY: N/A'
+        print('COMPANY: N/A')
 
     print('MX: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'MX', domain]).strip()))
     print('TXT: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'TXT', domain]).strip()))
 
     # open domain in browser
-    webbrowser.open('http://' + domain)
+    webbrowser.open('http://{}'.format(domain))
 
 # if you want to do anything cool with a keyword
 if len(sys.argv) > 2:
