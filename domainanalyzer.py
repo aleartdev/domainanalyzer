@@ -5,6 +5,7 @@ import sys
 import webbrowser
 import pythonwhois
 import socket
+import dns
 from datetime import *
 from dns import resolver , zone, query
 import subprocess
@@ -53,6 +54,7 @@ if len(sys.argv) > 1:
     print('DNS: {}'.format(' '.join(whois['nameservers'])))
 
     # get ip from domain
+<<<<<<< HEAD
     answers = res.query(domain)
     for rdata in answers:
         ips.append(rdata.address)
@@ -76,12 +78,51 @@ if len(sys.argv) > 1:
             print('COMPANY: {}'.format(name))
     else:
         print('COMPANY: N/A')
+=======
+    try:
+        answers = res.query(domain)
+        for rdata in answers:
+            ips.append(rdata.address)
+        print 'IP ' + ' / '.join(ips)
+
+        # get host from ip
+        try:
+            host = socket.gethostbyaddr(ips[0])
+            print 'HOST: ' + host[0]
+        except socket.error:
+            print 'HOST: N/A'
+        pass
+
+        # get name from ip
+        whois2 = pythonwhois.get_whois(ips[0], True)
+        if 'netname:' in str(whois2['raw']):
+            tail = str(whois2['raw']).split("netname:",1)
+            if tail:
+                tail = tail[1]
+                name=tail.split('\\')[0].strip()
+                print 'COMPANY: ' +name
+        else:
+            print 'COMPANY: N/A'
+
+    except dns.resolver.NXDOMAIN:
+        print "No such domain %s" % args.host
+    except dns.resolver.Timeout:
+        print "Timed out while resolving %s" % args.host
+    except dns.exception.DNSException:
+        print "Unhandled exception"
+        #https://stackoverflow.com/questions/9245067/is-it-reasonable-in-python-to-check-for-a-specific-type-of-exception-using-isins
+>>>>>>> 7f386e1d86aac7e748682f22749f9a6a7d4330e6
 
     print('MX: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'MX', domain]).strip()))
     print('TXT: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'TXT', domain]).strip()))
 
     # open domain in browser
+<<<<<<< HEAD
     webbrowser.open('http://{}'.format(domain))
+=======
+    #webbrowser.open('http://' + domain)
+    #webbrowser.open('https://builtwith.com/' + domain)
+>>>>>>> 7f386e1d86aac7e748682f22749f9a6a7d4330e6
 
 # if you want to do anything cool with a keyword
 if len(sys.argv) > 2:
