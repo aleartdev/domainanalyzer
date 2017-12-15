@@ -27,7 +27,8 @@ if '//' in domain:
 
 # resolve against google server to get more accurate whois
 res = resolver.Resolver()
-res.nameservers = ['8.8.8.8']
+resoving_nameserver = '8.8.8.8'
+res.nameservers = [resoving_nameserver]
 
 
 # init ip list for domain
@@ -86,11 +87,11 @@ if len(sys.argv) > 1:
        
 
     except dns.resolver.NXDOMAIN:
-        print "No such domain %s" % args.host
+        print 'No such domain resolving {} against {}'.format(domain,resoving_nameserver)
     except dns.resolver.Timeout:
-        print "Timed out while resolving %s" % args.host
+        print 'Timed out while resolving {} against {}'.format(domain,resoving_nameserver)
     except dns.exception.DNSException:
-        print "Unhandled exception"
+        print 'Unhandled exception resolving {} against {}'.format(domain,resoving_nameserver)
         #https://stackoverflow.com/questions/9245067/is-it-reasonable-in-python-to-check-for-a-specific-type-of-exception-using-isins
 
     print('MX: {}'.format(subprocess.check_output(['dig','+noall', '+answer', 'MX', domain]).strip()))
