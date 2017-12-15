@@ -10,6 +10,8 @@ from datetime import *
 from dns import resolver , zone, query
 import subprocess
 
+
+
 # supress traceback information on errors
 sys.tracebacklimit = 1
 
@@ -27,6 +29,7 @@ if '//' in domain:
 res = resolver.Resolver()
 res.nameservers = ['8.8.8.8']
 
+
 # init ip list for domain
 ips = []
 
@@ -39,8 +42,7 @@ if len(sys.argv) > 1:
     # calculate days left
     daysleft = (whois['expiration_date'][0].date() - datetime.now().date()).days
     exp = '' if daysleft > 66 else 'Exp ' + whois['expiration_date'][0].strftime("%Y-%m-%d") + ' (' + str(daysleft) + ' days left)'
-
-    # calculate hours ago
+# calculate hours ago
     try:
         hoursago = round((datetime.now().date() - whois['updated_date'][0].date()).total_seconds() / 3600)
         mod = '' if hoursago > 48 else 'Mod ' + whois['updated_date'][0].strftime("%Y-%m-%d") + " (%g hours ago)" % round(hoursago,0)
@@ -69,15 +71,19 @@ if len(sys.argv) > 1:
         pass
 
         # get name from ip
-        whois2 = pythonwhois.get_whois(ips[0], True)
-        if 'netname:' in str(whois2['raw']):
-            tail = str(whois2['raw']).split("netname:",1)
-            if tail:
-                tail = tail[1]
-                name=tail.split('\\')[0].strip()
-                print 'COMPANY: ' +name
-        else:
-            print 'COMPANY: N/A'
+        print(ips[0])
+        whois2 = pythonwhois.get_whois(ips[0], True) #nnetname??
+        print('COMPANY: '.format(whois2['contacts']['registrant']['name']))
+#       print(whois2)
+#       if 'netname:' in str(whois2['raw']):
+#           tail = str(whois2['raw']).split("netname:",1)
+#           if tail:
+#               tail = tail[1]
+#               name=tail.split('\\')[0].strip()
+#               print 'COMPANY: ' +name
+#       else:
+#           print 'COMPANY: N/A'
+       
 
     except dns.resolver.NXDOMAIN:
         print "No such domain %s" % args.host
