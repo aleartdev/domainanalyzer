@@ -19,7 +19,7 @@ sys.tracebacklimit = 1
 # TODO: This line is add from work to test conflict in git commits.
 
 # get domain from input arguments
-domain = 'davidfreiholtz.com'#sys.argv[1]
+domain = sys.argv[1]
 
 # strip extra domain information
 if '//' in domain:
