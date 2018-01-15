@@ -2,7 +2,7 @@
 # coding=utf-8
 
 import sys
-import webbrowser
+import requests
 import pythonwhois
 import socket
 import dns
@@ -40,6 +40,13 @@ if len(sys.argv) > 1:
     # get whois
     whois = pythonwhois.get_whois(domain, True)
 
+    # get php version
+    r = requests.get('http://{}'.format(domain))
+    try:
+        php = r.headers['X-Powered-By']
+    except:
+        pass
+
     # calculate days left
     daysleft = (whois['expiration_date'][0].date() - datetime.now().date()).days
     exp = '' if daysleft > 66 else 'Exp ' + whois['expiration_date'][0].strftime("%Y-%m-%d") + ' (' + str(daysleft) + ' days left)'
@@ -55,6 +62,7 @@ if len(sys.argv) > 1:
     if exp: print(exp)
     print('REG: {}'.format(' '.join(whois['registrar'])))
     print('DNS: {}'.format(' '.join(whois['nameservers'])))
+    print('PHP: {}'.format(php))
 
     # get ip from domain
     try:
@@ -74,7 +82,7 @@ if len(sys.argv) > 1:
         # get name from ip
         print(ips[0])
         whois2 = pythonwhois.get_whois(ips[0], True) #nnetname??
-        print('COMPANY: '.format(whois2['contacts']['registrant']['name']))
+        print('COMPANY: {}'.format(whois2['contacts']['registrant']['name']))
 #       print(whois2)
 #       if 'netname:' in str(whois2['raw']):
 #           tail = str(whois2['raw']).split("netname:",1)
