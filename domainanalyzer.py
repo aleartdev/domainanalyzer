@@ -11,6 +11,8 @@ import dns
 from dns import resolver
 
 # TODO: Highlight important information
+# TODO: use second parameter to suggest solutions
+# TODO: curl for ssl certificate
 
 UNKNOWN = r'¯\_(ツ)_/¯'
 RESOVING_NAMESERVER = '8.8.8.8'
@@ -48,8 +50,11 @@ IPS = []
 if len(sys.argv) > 1:
 
     # get whois
-  
-    WHOIS = pythonwhois.get_whois(DOMAIN, True)
+    try:
+        WHOIS = pythonwhois.get_whois(DOMAIN, True)
+    except UnicodeDecodeError:
+        print('Python whois UnicodeDecodeError')
+        WHOIS = False
 
     # get php version
     PHP = UNKNOWN
@@ -63,23 +68,45 @@ if len(sys.argv) > 1:
         pass
 
     # calculate days left
-    DAYSLEFT = (WHOIS['expiration_date'][0].date() - datetime.now().date()).days
-    EXP = '' if DAYSLEFT > 66 else 'EXP\t' + WHOIS['expiration_date'][0].strftime("%Y-%m-%d") + ' (' + str(DAYSLEFT) + ' days)'
+    try:
+        DAYSLEFT = (WHOIS['expiration_date'][0].date() - datetime.now().date()).days
+    except (KeyError, TypeError):
+        DAYSLEFT = False
+
+    if DAYSLEFT:
+        EXP = '' if DAYSLEFT > 66 else WHOIS['expiration_date'][0].strftime("%Y-%m-%d") + ' (' + str(DAYSLEFT) + ' days)'
+    else:
+        EXP = UNKNOWN
 # calculate hours ago
     try:
         HOURSAGO = round((datetime.now().date() - WHOIS['updated_date'][0].date()).total_seconds() / 3600)
-        MOD = '' if HOURSAGO > 48 else 'Mod\t' + WHOIS['updated_date'][0].strftime("%Y-%m-%d") + " (%g hours)" % round(HOURSAGO, 0)
-    except KeyError:
-        MOD = 'Mod\tN/A'
+        MOD = '' if HOURSAGO > 48 else WHOIS['updated_date'][0].strftime("%Y-%m-%d") + " (%g hours)" % round(HOURSAGO, 0)
+    except (KeyError, TypeError):
+        MOD = UNKNOWN
 
-    print('STATUS\t{}'.format(' '.join(WHOIS['status'])))
+    try:
+        STATUS = ' '.join(WHOIS['status'])
+    except (KeyError, TypeError):
+        STATUS = UNKNOWN
+    if STATUS:
+        print('STATUS\t{}'.format(STATUS))
+    
     if MOD:
-        print(MOD)
+        print('MOD\t{}'.format(MOD))
     if EXP:
-        print(EXP)
-    print('REG\t{}'.format(' '.join(WHOIS['registrar'])))
-    print('DNS\t{}'.format(' '.join(WHOIS['nameservers'])))
-    print('PHP\t{}'.format(PHP))
+        print('EXP\t{}'.format(EXP))
+    try:
+        print('REG\t{}'.format(' '.join(WHOIS['registrar'])))
+    except (KeyError, TypeError):
+        pass
+    try:
+        print('DNS\t{}'.format(' '.join(WHOIS['nameservers'])))
+    except (KeyError, TypeError):
+        pass
+    try:
+        print('PHP\t{}'.format(PHP))
+    except (KeyError, TypeError):
+        pass
 
 
     # get ip from domain
@@ -113,7 +140,7 @@ if len(sys.argv) > 1:
     except dns.exception.DNSException:
         print('ERR\tDNSException')
 
-    MX = subprocess.check_output(['dig', '+noall', '+answer', 'MX', DOMAIN]).decode('unicode_escape').strip().replace('\n','\n\t')
+    MX = subprocess.check_output(['dig', '+noall', '+answer', 'MX', DOMAIN]).decode('unicode_escape').strip().replace('\n', '\n\t')
     if MX:
         print('MX\t{}'.format(MX))
     else:
