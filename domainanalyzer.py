@@ -105,41 +105,46 @@ def get_information(domain):
         daysleft = (whois['expiration_date'][0].date() - datetime.now().date()).days
     except (KeyError, TypeError):
         daysleft = False
+    
 
     if daysleft:
         exp = '' if daysleft > 66 else whois['expiration_date'][0].strftime("%Y-%m-%d") + ' (' + str(daysleft) + ' days)'
     else:
-        exp = UNKNOWN
+        exp = ''
+    information['exp'] = exp
+
     # calculate hours ago
     try:
         hoursago = round((datetime.now().date() - whois['updated_date'][0].date()).total_seconds() / 3600)
         mod = '' if hoursago > 48 else whois['updated_date'][0].strftime("%Y-%m-%d") + " (%g hours)" % round(hoursago, 0)
     except (KeyError, TypeError):
-        mod = UNKNOWN
+        mod = ''
+    information['mod'] = mod
 
     try:
         status = ' '.join(whois['status'])
     except (KeyError, TypeError):
-        status = UNKNOWN
+        status = ''
+    information['status'] = status
+
     if status:
         print('STATUS\t{}'.format(status))
     if mod:
         print('MOD\t{}'.format(mod))
     if exp:
         print('EXP\t{}'.format(exp))
-    try:
-        print('REG\t{}'.format(' '.join(whois['registrar'])))
-    except (KeyError, TypeError):
-        pass
-    try:
-        print('DNS\t{}'.format(' '.join(whois['nameservers'])))
-    except (KeyError, TypeError):
-        pass
-    try:
-        print('PHP\t{}'.format(php))
-    except (KeyError, TypeError):
-        pass
 
+    try:
+        reg = ' '.join(whois['registrar'])
+    except (KeyError, TypeError):
+        reg = ''
+    information['reg'] = reg
+
+    try:
+        dns = ' '.join(whois['nameservers'])
+    except (KeyError, TypeError):
+        dns = ''
+    information['dns'] = dns
 
     # get ip from domain
     try:
@@ -147,7 +152,8 @@ def get_information(domain):
         for rdata in answers:
             ips.append(rdata.address)
         print('IP\t{}'.format(' / '.join(ips)))
-
+        information['ip'] = ' / '.join(ips)
+        
         # get host from ip
         try:
             host = socket.gethostbyaddr(ips[0])
