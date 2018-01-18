@@ -14,147 +14,182 @@ from dns import resolver
 # TODO: use second parameter to suggest solutions
 # TODO: curl for ssl certificate
 
+# Settings
 UNKNOWN = r'¯\_(ツ)_/¯'
 RESOVING_NAMESERVER = '8.8.8.8'
 
-# Get domain name form arguments
-DOMAIN = sys.argv[1]
+def main():
+    """Main function"""
 
-# PROBLEM = sys.argv[2]
-# INFORMATION = information(DOMAIN)
-# SUGGESTIONS = analyze(INFORMATION, PROBLEM)
-# visualize(SUGGESTIONS)
+    # get the domain from arguments
+    domain = get_argument(1, None)
 
-# strip extra domain information
-if '//' in DOMAIN:
-    DOMAIN = DOMAIN.split("//")[-1].split("/")[0]
+    # get the problem from arguments
+    problem = get_argument(2, None)
 
-# get punycode
-try:
-    DOMAIN.encode(encoding='utf-8').decode('ascii')
-except UnicodeDecodeError:
-    DOMAIN_PUNYCODE = DOMAIN.encode("idna").decode("utf-8")
-else:
-    DOMAIN_PUNYCODE = ''
+    # get information about the domain
+    information = get_information(domain)
+    
+    # get suggestions on how to fix the domains problem
+    suggestions = analyze(information, problem)
+    
+    # communicate suggestions to user
+    output_console(suggestions)
+
+def analyze(information, problem):
+    """Get suggestions what can be fixed"""
+    suggestions = []
+    suggestions.append(information['domain_name'])
+    return suggestions
 
 
-# resolve against google server to get more accurate whois
-RES = resolver.Resolver()
-RES.nameservers = [RESOVING_NAMESERVER]
-
-
-# init ip list for domain
-IPS = []
-
-# if domain name is given
-if len(sys.argv) > 1:
-
-    # get whois
+def get_argument(index, return_except):
+    """get argument at index or returns return_except"""
     try:
-        WHOIS = pythonwhois.get_whois(DOMAIN, True)
+        return sys.argv[index]
+    except IndexError:
+        return return_except
+
+def get_information(domain):
+    """get information about the domain"""
+    
+    # prepare domain information dictionary
+    information = {}
+
+    # get only domain name
+    information['domain_name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
+
+    domain = information['domain_name']
+
+    # get punycode
+    try:
+        domain.encode(encoding='utf-8').decode('ascii')
     except UnicodeDecodeError:
-        print('Python whois UnicodeDecodeError')
-        WHOIS = False
-
-    # get php version
-    PHP = UNKNOWN
-    try:
-        RESULT = requests.get('http://{}'.format(DOMAIN))
-        try:
-            PHP = RESULT.headers['X-Powered-By']
-        except KeyError:
-            pass
-    except:
-        pass
-
-    # calculate days left
-    try:
-        DAYSLEFT = (WHOIS['expiration_date'][0].date() - datetime.now().date()).days
-    except (KeyError, TypeError):
-        DAYSLEFT = False
-
-    if DAYSLEFT:
-        EXP = '' if DAYSLEFT > 66 else WHOIS['expiration_date'][0].strftime("%Y-%m-%d") + ' (' + str(DAYSLEFT) + ' days)'
+        domain_punycode = domain.encode("idna").decode("utf-8")
     else:
-        EXP = UNKNOWN
-# calculate hours ago
-    try:
-        HOURSAGO = round((datetime.now().date() - WHOIS['updated_date'][0].date()).total_seconds() / 3600)
-        MOD = '' if HOURSAGO > 48 else WHOIS['updated_date'][0].strftime("%Y-%m-%d") + " (%g hours)" % round(HOURSAGO, 0)
-    except (KeyError, TypeError):
-        MOD = UNKNOWN
-
-    try:
-        STATUS = ' '.join(WHOIS['status'])
-    except (KeyError, TypeError):
-        STATUS = UNKNOWN
-    if STATUS:
-        print('STATUS\t{}'.format(STATUS))
-    
-    if MOD:
-        print('MOD\t{}'.format(MOD))
-    if EXP:
-        print('EXP\t{}'.format(EXP))
-    try:
-        print('REG\t{}'.format(' '.join(WHOIS['registrar'])))
-    except (KeyError, TypeError):
-        pass
-    try:
-        print('DNS\t{}'.format(' '.join(WHOIS['nameservers'])))
-    except (KeyError, TypeError):
-        pass
-    try:
-        print('PHP\t{}'.format(PHP))
-    except (KeyError, TypeError):
-        pass
+        domain_punycode = ''
 
 
-    # get ip from domain
-    try:
-        ANSWERS = RES.query(DOMAIN)
-        for rdata in ANSWERS:
-            IPS.append(rdata.address)
-        print('IP\t{}'.format(' / '.join(IPS)))
+    # resolve against google server to get more accurate whois
+    res = resolver.Resolver()
+    res.nameservers = [RESOVING_NAMESERVER]
 
-        # get host from ip
+
+    # init ip list for domain
+    ips = []
+
+    # if domain name is given
+    if len(sys.argv) > 1:
+
+        # get whois
         try:
-            HOST = socket.gethostbyaddr(IPS[0])
-            print('HOST\t{}'.format(HOST[0]))
-        except socket.error:
-            print('HOST\t{}'.format(UNKNOWN))
+            whois = pythonwhois.get_whois(domain, True)
+        except UnicodeDecodeError:
+            print('Python whois UnicodeDecodeError')
+            whois = False
 
-        # get name from ip
-        WHOIS_2 = pythonwhois.get_whois(IPS[0], True)
+        # get php version
+        php = UNKNOWN
         try:
-            print('ORG\t{}'.format(WHOIS_2['contacts']['registrant']['name']))
-        except (KeyError, TypeError):
+            result = requests.get('http://{}'.format(domain))
             try:
-                print('ORG\t{}'.format(WHOIS_2['emails'][0]))
+                php = result.headers['X-Powered-By']
             except KeyError:
-                print('ORG\t{}'.format(UNKNOWN))
+                pass
+        except:
+            pass
 
-    except dns.resolver.NXDOMAIN:
-        print('ERR\tNo such domain (NXDOMAIN)')
-    except dns.resolver.Timeout:
-        print('ERR\tTimeout')
-    except dns.exception.DNSException:
-        print('ERR\tDNSException')
+        # calculate days left
+        try:
+            daysleft = (whois['expiration_date'][0].date() - datetime.now().date()).days
+        except (KeyError, TypeError):
+            daysleft = False
 
-    MX = subprocess.check_output(['dig', '+noall', '+answer', 'MX', DOMAIN]).decode('unicode_escape').strip().replace('\n', '\n\t')
-    if MX:
-        print('MX\t{}'.format(MX))
-    else:
-        print('MX\t{}'.format(UNKNOWN))
+        if daysleft:
+            exp = '' if daysleft > 66 else whois['expiration_date'][0].strftime("%Y-%m-%d") + ' (' + str(daysleft) + ' days)'
+        else:
+            exp = UNKNOWN
+    # calculate hours ago
+        try:
+            hoursago = round((datetime.now().date() - whois['updated_date'][0].date()).total_seconds() / 3600)
+            mod = '' if hoursago > 48 else whois['updated_date'][0].strftime("%Y-%m-%d") + " (%g hours)" % round(hoursago, 0)
+        except (KeyError, TypeError):
+            mod = UNKNOWN
+
+        try:
+            status = ' '.join(whois['status'])
+        except (KeyError, TypeError):
+            status = UNKNOWN
+        if status:
+            print('STATUS\t{}'.format(status))
+        if mod:
+            print('MOD\t{}'.format(mod))
+        if exp:
+            print('EXP\t{}'.format(exp))
+        try:
+            print('REG\t{}'.format(' '.join(whois['registrar'])))
+        except (KeyError, TypeError):
+            pass
+        try:
+            print('DNS\t{}'.format(' '.join(whois['nameservers'])))
+        except (KeyError, TypeError):
+            pass
+        try:
+            print('PHP\t{}'.format(php))
+        except (KeyError, TypeError):
+            pass
 
 
-    print('TXT\t{}'.format(subprocess.check_output(['dig', '+noall', '+answer', 'TXT', DOMAIN]).decode('unicode_escape').strip()))
+        # get ip from domain
+        try:
+            answers = res.query(domain)
+            for rdata in answers:
+                ips.append(rdata.address)
+            print('IP\t{}'.format(' / '.join(ips)))
 
-    if DOMAIN_PUNYCODE:
-        print('PUNY\t{}'.format(DOMAIN_PUNYCODE))
-    
-    # if you want to open domain in browser
-    # webbrowser.open('http://' + DOMAIN)
+            # get host from ip
+            try:
+                host = socket.gethostbyaddr(ips[0])
+                print('HOST\t{}'.format(host[0]))
+            except socket.error:
+                print('HOST\t{}'.format(UNKNOWN))
 
-# if you want to do anything cool with a keyword
-if len(sys.argv) > 2:
-    pass
+            # get name from ip
+            whois_2 = pythonwhois.get_whois(ips[0], True)
+            try:
+                print('ORG\t{}'.format(whois_2['contacts']['registrant']['name']))
+            except (KeyError, TypeError):
+                try:
+                    print('ORG\t{}'.format(whois_2['emails'][0]))
+                except KeyError:
+                    print('ORG\t{}'.format(UNKNOWN))
+
+        except dns.resolver.NXDOMAIN:
+            print('ERR\tNo such domain (NXDOMAIN)')
+        except dns.resolver.Timeout:
+            print('ERR\tTimeout')
+        except dns.exception.DNSException:
+            print('ERR\tDNSException')
+
+        mx_ = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain]).decode('unicode_escape').strip().replace('\n', '\n\t')
+        if mx_:
+            print('MX\t{}'.format(mx_))
+        else:
+            print('MX\t{}'.format(UNKNOWN))
+
+
+        print('TXT\t{}'.format(subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain]).decode('unicode_escape').strip()))
+        
+        if domain_punycode:
+            print('PUNY\t{}'.format(domain_punycode))
+        # if you want to open domain in browser
+        # webbrowser.open('http://' + DOMAIN)
+        return information
+
+def output_console(suggestions):
+    """output suggestions to console"""
+    for suggestion in suggestions:
+        print(suggestion)
+
+if __name__ == "__main__":
+    main()
