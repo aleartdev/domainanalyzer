@@ -24,6 +24,7 @@ DOMAIN = sys.argv[1]
 # INFORMATION = information(DOMAIN)
 # SUGGESTIONS = analyze(INFORMATION, PROBLEM)
 # visualize(SUGGESTIONS)
+#
 
 # strip extra domain information
 if '//' in DOMAIN:
