@@ -53,7 +53,7 @@ if len(sys.argv) > 1:
     try:
         WHOIS = pythonwhois.get_whois(DOMAIN, True)
     except UnicodeDecodeError:
-        print('Python whois UnicodeDecodeError')
+        print('Python whois UnicodeDecodeError (Domain)')
         WHOIS = False
 
     # get php version
@@ -124,13 +124,17 @@ if len(sys.argv) > 1:
             print('HOST\t{}'.format(UNKNOWN))
 
         # get name from ip
-        WHOIS_2 = pythonwhois.get_whois(IPS[0], True)
+        try:
+            WHOIS_2 = pythonwhois.get_whois(IPS[0], True)
+        except UnicodeDecodeError:
+            print('Python whois UnicodeDecodeError (IP)')
+            WHOIS_2 = False
         try:
             print('ORG\t{}'.format(WHOIS_2['contacts']['registrant']['name']))
         except (KeyError, TypeError):
             try:
                 print('ORG\t{}'.format(WHOIS_2['emails'][0]))
-            except KeyError:
+            except (KeyError, TypeError):
                 print('ORG\t{}'.format(UNKNOWN))
 
     except dns.resolver.NXDOMAIN:
