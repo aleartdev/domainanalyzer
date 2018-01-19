@@ -21,8 +21,11 @@ RESOVING_NAMESERVER = '8.8.8.8'
 def main():
     """Main function"""
 
-    # get the domain from arguments
-    domain = get_argument(1, None)
+# PROBLEM = sys.argv[2]
+# INFORMATION = information(DOMAIN)
+# SUGGESTIONS = analyze(INFORMATION, PROBLEM)
+# visualize(SUGGESTIONS)
+#
 
     # get the problem from arguments
     problem = get_argument(2, None)
@@ -86,9 +89,8 @@ def get_information(domain):
     try:
         whois = pythonwhois.get_whois(domain, True)
     except UnicodeDecodeError:
-        whois = False
-        information['whois'] = 'Python whois UnicodeDecodeError'
-    
+        print('Python whois UnicodeDecodeError (Domain)')
+        WHOIS = False
 
     # get php version
     try:
@@ -155,15 +157,18 @@ def get_information(domain):
         information['host'] = host
 
         # get name from ip
-        whois_2 = pythonwhois.get_whois(ips[0], True)
+        try:
+            WHOIS_2 = pythonwhois.get_whois(IPS[0], True)
+        except UnicodeDecodeError:
+            print('Python whois UnicodeDecodeError (IP)')
+            WHOIS_2 = False
         try:
             org = whois_2['contacts']['registrant']['name']
         except (KeyError, TypeError):
             try:
-                org = whois_2['emails'][0]
-            except KeyError:
-                org = ''
-        information['org'] = org
+                print('ORG\t{}'.format(WHOIS_2['emails'][0]))
+            except (KeyError, TypeError):
+                print('ORG\t{}'.format(UNKNOWN))
 
     except dns.resolver.NXDOMAIN:
         information['err'] = 'ERR\tNo such domain (NXDOMAIN)'
