@@ -3,39 +3,48 @@
 """Analyzes given domainnamne and pressents important information"""
 import sys
 import socket
-from datetime import datetime
 import subprocess
 import requests
 import pythonwhois
 import dns
 from dns import resolver
 
-# TODO: Highlight important information
-# TODO: use second parameter to suggest solutions
-# TODO: curl for ssl certificate
+# TODO: fix for ÅÄÖ domains like xn--hlsa-loa.se hälsa.se
+# TODO: maybe use subprocess whois instead and parese to avoid pwhois encoding problems
+# use chardet and https://github.com/joepie91/python-whois/pull/59 to solv problem in net.py 
 
 # Settings
-UNKNOWN = r'¯\_(ツ)_/¯'
+UNKNOWN = r''
 RESOVING_NAMESERVER = '8.8.8.8'
+
+COLOR = {
+    'purple': '\033[95m',
+    'cyan': '\033[96m',
+    'darkcyan': '\033[36m',
+    'blue': '\033[94m',
+    'green': '\033[92m',
+    'yellow': '\033[93m',
+    'red': '\033[91m',
+    'bold': '\033[1m',
+    'underline': '\033[4m',
+    'end': '\033[0m'
+}
 
 def main():
     """Main function"""
 
-# PROBLEM = sys.argv[2]
-# INFORMATION = information(DOMAIN)
-# SUGGESTIONS = analyze(INFORMATION, PROBLEM)
-# visualize(SUGGESTIONS)
-#
+    # get the domain from arguments
+    domain = get_argument(1, None)
 
     # get the problem from arguments
     problem = get_argument(2, None)
 
     # get information about the domain
     information = get_information(domain) if domain else {}
-    
+
     # get suggestions on how to fix the domains problem
     suggestions = analyze(information, problem) if domain else {}
-    
+
     # communicate information and suggestions to user
     output_console(information, suggestions)
 
@@ -59,7 +68,7 @@ def get_argument(index, return_except):
 
 def get_information(domain):
     """get information about the domain"""
-    
+
     # prepare domain information dictionary
     information = {}
 
@@ -69,8 +78,8 @@ def get_information(domain):
 
     # get only domain name
     information['name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
-
-    # remove
+    
+    # use only domain name for rest of the script
     domain = information['name']
 
     # get punycode
@@ -89,8 +98,15 @@ def get_information(domain):
     try:
         whois = pythonwhois.get_whois(domain, True)
     except UnicodeDecodeError:
-        print('Python whois UnicodeDecodeError (Domain)')
-        WHOIS = False
+        whois = False
+        information['ERR1'] = 'Python whois UnicodeDecodeError (Domain)'
+
+    # get SSL cert
+    try:
+        cert = requests.get('https://{}'.format(domain), verify=True)
+        information['SSL'] = 'Yes'
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        information['SSL'] = 'No'
 
     # get php version
     try:
@@ -103,27 +119,19 @@ def get_information(domain):
         php = ''
     information['php'] = php
 
-    # calculate days left
+    # get expiry date
     try:
-        daysleft = (whois['expiration_date'][0].date() - datetime.now().date()).days
+        information['exp'] = whois['expiration_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
-        daysleft = False
-    
+        information['exp'] = ''
 
-    if daysleft:
-        exp = '' if daysleft > 66 else whois['expiration_date'][0].strftime("%Y-%m-%d") + ' (' + str(daysleft) + ' days)'
-    else:
-        exp = ''
-    information['exp'] = exp
-
-    # calculate hours ago
+    # get modified
     try:
-        hoursago = round((datetime.now().date() - whois['updated_date'][0].date()).total_seconds() / 3600)
-        mod = '' if hoursago > 48 else whois['updated_date'][0].strftime("%Y-%m-%d") + " (%g hours)" % round(hoursago, 0)
+        information['mod'] = whois['updated_date'][0].strftime("%Y-%m-%d %H:%M")
     except (KeyError, TypeError):
-        mod = ''
-    information['mod'] = mod
+        information['mod'] = ''
 
+    # get status
     try:
         status = ' '.join(whois['status'])
     except (KeyError, TypeError):
@@ -158,17 +166,18 @@ def get_information(domain):
 
         # get name from ip
         try:
-            WHOIS_2 = pythonwhois.get_whois(IPS[0], True)
+            whois_2 = pythonwhois.get_whois(ips[0], True)
         except UnicodeDecodeError:
-            print('Python whois UnicodeDecodeError (IP)')
-            WHOIS_2 = False
+            whois_2 = False
+            information['ERR2'] = 'Python whois UnicodeDecodeError (IP)'
         try:
             org = whois_2['contacts']['registrant']['name']
         except (KeyError, TypeError):
             try:
-                print('ORG\t{}'.format(WHOIS_2['emails'][0]))
+                org = whois_2['emails'][0]
             except (KeyError, TypeError):
-                print('ORG\t{}'.format(UNKNOWN))
+                org = ''
+        information['org'] = org
 
     except dns.resolver.NXDOMAIN:
         information['err'] = 'ERR\tNo such domain (NXDOMAIN)'
@@ -182,9 +191,9 @@ def get_information(domain):
         information['mx'] = mx_
     else:
         information['mx'] = ''
-    
 
-    information['txt'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain]).decode('unicode_escape').strip()
+
+    information['txt'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain]).decode('unicode_escape').strip().replace('\n', '\n\t')
 
     # if you want to open domain in browser
     # webbrowser.open('http://' + DOMAIN)
@@ -193,12 +202,13 @@ def get_information(domain):
 def output_console(information, suggestions):
     """output suggestions to console"""
     for key, value in information.items():
-        if(value):
-            print('{}\t {}'.format(key, value))
+        if value:
+            print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], value))
         else:
-            print('{}\t {}'.format(key, UNKNOWN))
+            print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], UNKNOWN))
     for suggestion in suggestions:
         print(suggestion)
+#test
 
 if __name__ == "__main__":
     main()
