@@ -39,11 +39,11 @@ def main():
 def analyze(information, problem):
     """Get suggestions what can be fixed"""
     suggestions = []
-    for key, value in information.items():
-        if(value):
-            suggestions.append('{}\t {}'.format(key, value))
-        else:
-            suggestions.append('{}\t {}'.format(key, UNKNOWN))
+    # for key, value in information.items():
+    #     if(value):
+    #         suggestions.append('{}\t {}'.format(key, value))
+    #     else:
+    #         suggestions.append('{}\t {}'.format(key, UNKNOWN))
     return suggestions
 
 
@@ -86,8 +86,9 @@ def get_information(domain):
     try:
         whois = pythonwhois.get_whois(domain, True)
     except UnicodeDecodeError:
-        print('Python whois UnicodeDecodeError')
         whois = False
+        information['whois'] = 'Python whois UnicodeDecodeError'
+    
 
     # get php version
     try:
@@ -127,13 +128,6 @@ def get_information(domain):
         status = ''
     information['status'] = status
 
-    if status:
-        print('STATUS\t{}'.format(status))
-    if mod:
-        print('MOD\t{}'.format(mod))
-    if exp:
-        print('EXP\t{}'.format(exp))
-
     try:
         reg = ' '.join(whois['registrar'])
     except (KeyError, TypeError):
@@ -141,54 +135,52 @@ def get_information(domain):
     information['reg'] = reg
 
     try:
-        dns = ' '.join(whois['nameservers'])
+        ns_ = ' '.join(whois['nameservers'])
     except (KeyError, TypeError):
-        dns = ''
-    information['dns'] = dns
+        ns_ = ''
+    information['dns'] = ns_
 
     # get ip from domain
     try:
         answers = res.query(domain)
         for rdata in answers:
             ips.append(rdata.address)
-        print('IP\t{}'.format(' / '.join(ips)))
         information['ip'] = ' / '.join(ips)
-        
+
         # get host from ip
         try:
-            host = socket.gethostbyaddr(ips[0])
-            print('HOST\t{}'.format(host[0]))
+            host = socket.gethostbyaddr(ips[0])[0]
         except socket.error:
-            print('HOST\t{}'.format(UNKNOWN))
+            host = ''
+        information['host'] = host
 
         # get name from ip
         whois_2 = pythonwhois.get_whois(ips[0], True)
         try:
-            print('ORG\t{}'.format(whois_2['contacts']['registrant']['name']))
+            org = whois_2['contacts']['registrant']['name']
         except (KeyError, TypeError):
             try:
-                print('ORG\t{}'.format(whois_2['emails'][0]))
+                org = whois_2['emails'][0]
             except KeyError:
-                print('ORG\t{}'.format(UNKNOWN))
+                org = ''
+        information['org'] = org
 
     except dns.resolver.NXDOMAIN:
-        print('ERR\tNo such domain (NXDOMAIN)')
+        information['err'] = 'ERR\tNo such domain (NXDOMAIN)'
     except dns.resolver.Timeout:
-        print('ERR\tTimeout')
+        information['err'] = 'ERR\tTimeout'
     except dns.exception.DNSException:
-        print('ERR\tDNSException')
+        information['err'] = 'ERR\tDNSException'
 
     mx_ = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain]).decode('unicode_escape').strip().replace('\n', '\n\t')
     if mx_:
-        print('MX\t{}'.format(mx_))
+        information['mx'] = mx_
     else:
-        print('MX\t{}'.format(UNKNOWN))
-
-
-    print('TXT\t{}'.format(subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain]).decode('unicode_escape').strip()))
+        information['mx'] = ''
     
-    if domain_punycode:
-        print('PUNY\t{}'.format(domain_punycode))
+
+    information['txt'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain]).decode('unicode_escape').strip()
+
     # if you want to open domain in browser
     # webbrowser.open('http://' + DOMAIN)
     return information
