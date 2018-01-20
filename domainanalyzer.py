@@ -8,10 +8,11 @@ import requests
 import pythonwhois
 import dns
 from dns import resolver
+import lxml.html
+import urllib
 
-# TODO: fix for ÅÄÖ domains like xn--hlsa-loa.se hälsa.se
-# TODO: maybe use subprocess whois instead and parese to avoid pwhois encoding problems
-# use chardet and https://github.com/joepie91/python-whois/pull/59 to solv problem in net.py 
+# This fix needs to be used on net.py in pythonwhois on your local computer to correctly handle non standard characters
+# https://github.com/joepie91/python-whois/pull/59
 
 # Settings
 UNKNOWN = r''
@@ -101,12 +102,34 @@ def get_information(domain):
         whois = False
         information['ERR1'] = 'Python whois UnicodeDecodeError (Domain)'
 
+    # get Wordpress admin login status code
+    try:
+        r = requests.get('http://{}/wp-admin'.format(domain))
+        if(r.status_code == 200):
+            information['WP'] = True
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        information['WP'] = False
+
+    # get main site status code
+    try:
+        html = urllib.request.urlopen('http://{}'.format(domain))
+        site = lxml.html.parse(html)
+        information['TITLE'] = site.find(".//title").text
+    except urllib.error.HTTPError:
+        information['TITLE'] = ''
+
     # get SSL cert
     try:
         cert = requests.get('https://{}'.format(domain), verify=True)
         information['SSL'] = 'Yes'
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
         information['SSL'] = 'No'
+    
+    try:
+        site = requests.get('http://{}'.format(domain))
+        information['server'] = site.headers['server']
+    except:
+        information['server'] = ''
 
     # get php version
     try:
@@ -127,13 +150,13 @@ def get_information(domain):
 
     # get modified
     try:
-        information['mod'] = whois['updated_date'][0].strftime("%Y-%m-%d %H:%M")
+        information['mod'] = whois['updated_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
         information['mod'] = ''
 
     # get status
     try:
-        status = ' '.join(whois['status'])
+        status = ','.join(whois['status'])
     except (KeyError, TypeError):
         status = ''
     information['status'] = status
@@ -192,17 +215,16 @@ def get_information(domain):
     else:
         information['mx'] = ''
 
-
     information['txt'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain]).decode('unicode_escape').strip().replace('\n', '\n\t')
 
-    # if you want to open domain in browser
-    # webbrowser.open('http://' + DOMAIN)
     return information
 
 def output_console(information, suggestions):
     """output suggestions to console"""
     for key, value in information.items():
         if value:
+            if(value == True):
+                value = 'Yes'
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], value))
         else:
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], UNKNOWN))
