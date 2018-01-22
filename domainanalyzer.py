@@ -15,6 +15,8 @@ import re
 # This fix needs to be used on net.py in pythonwhois on your local computer to correctly handle non standard characters
 # https://github.com/joepie91/python-whois/pull/59
 
+# TODO: Better title parser
+
 # Settings
 UNKNOWN = r''
 RESOVING_NAMESERVER = '8.8.8.8'
@@ -73,7 +75,7 @@ def analyze(information, problem):
         suggestions['notice'].append('PHP version not detected!')
 
     # varning mx ip dont match 
-    if(information['IP'] != information['MXIP']):
+    if(information['MX'] and (information['IP'] != information['MXIP'])):
         if(information['MXIP']==''):
             suggestions['varning'].append('MX host lookup failed!')
         else:
@@ -111,11 +113,13 @@ def get_information(domain):
     # get punycode
     try:
         domain.encode(encoding='utf-8').decode('ascii')
+        domain_dig = domain
     except UnicodeDecodeError:
         domain_punycode = domain.encode("idna").decode("utf-8")
+        domain_dig = domain_punycode
     else:
         domain_punycode = ''
-    information['SNI'] = domain_punycode
+    information['IDN'] = domain_punycode
 
     # init ip list for domain
     ips = []
@@ -161,6 +165,8 @@ def get_information(domain):
         result = requests.get('http://{}'.format(domain))
         try:
             php = result.headers['X-Powered-By']
+            if('php' not in php):
+                php = ''
         except KeyError:
             php = ''
     except:
@@ -215,9 +221,9 @@ def get_information(domain):
         # get name from ip
         try:
             whois_2 = pythonwhois.get_whois(ips[0], True)
-        except UnicodeDecodeError:
+        except (UnicodeDecodeError, ValueError) as e:
             whois_2 = False
-            information['ERR2'] = 'Python whois UnicodeDecodeError (IP)'
+            information['ERR2'] = 'Python whois DecodeError (IP) {}'.format(e)
         try:
             org = whois_2['contacts']['registrant']['name']
         except (KeyError, TypeError):
@@ -234,7 +240,7 @@ def get_information(domain):
     except dns.exception.DNSException:
         information['ERR'] = 'ERR\tDNSException'
 
-    mx_ = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain]).decode('unicode_escape').strip().replace('\n', '\n\t')
+    mx_ = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain_dig]).decode('unicode_escape').strip().replace('\n', '\n\t')
     if mx_:
         information['MX'] = mx_
     else:
@@ -258,8 +264,8 @@ def get_information(domain):
         except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
             information['MXIP'] = ''
             
-
-    information['TXT'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain]).decode('unicode_escape').strip().replace('\n', '\n\t')
+    # dig +noall +answer TXT domain
+    information['TXT'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain_dig]).decode('unicode_escape').strip().replace('\n', '\n\t')
 
     return information
 
