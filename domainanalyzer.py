@@ -10,6 +10,7 @@ import dns
 from dns import resolver
 import lxml.html
 import urllib
+import re
 
 # This fix needs to be used on net.py in pythonwhois on your local computer to correctly handle non standard characters
 # https://github.com/joepie91/python-whois/pull/59
@@ -51,12 +52,36 @@ def main():
 
 def analyze(information, problem):
     """Get suggestions what can be fixed"""
-    suggestions = []
-    # for key, value in information.items():
-    #     if(value):
-    #         suggestions.append('{}\t {}'.format(key, value))
-    #     else:
-    #         suggestions.append('{}\t {}'.format(key, UNKNOWN))
+    suggestions = {'errors':[],'varning':[],'notice':[]}
+
+    # varning status
+    if('ok' not in information['STAT']):
+        suggestions['errors'].append('Status code not OK!')
+    
+    # notice ssl 
+    if(information['SSL'] == 'No'):
+        suggestions['notice'].append('No SSL detected!')
+
+    # varning spf 
+    if('spf' not in information['TXT'].lower()):
+        suggestions['varning'].append('No SPF record!')
+    
+    # php
+    if('5.' in information['PHP']):
+        suggestions['varning'].append('Low PHP version!')
+    if(information['PHP']==''):
+        suggestions['notice'].append('PHP version not detected!')
+
+    # varning mx ip dont match 
+    if(information['IP'] != information['MXIP']):
+        if(information['MXIP']==''):
+            suggestions['varning'].append('MX host lookup failed!')
+        else:
+            if('oderland' in information['MXH'].lower() and 'oderland' in information['HOST'].lower()):
+                pass
+            else:
+                suggestions['notice'].append('External mail detected!')
+
     return suggestions
 
 
@@ -90,7 +115,7 @@ def get_information(domain):
         domain_punycode = domain.encode("idna").decode("utf-8")
     else:
         domain_punycode = ''
-    information['puny'] = domain_punycode
+    information['SNI'] = domain_punycode
 
     # init ip list for domain
     ips = []
@@ -127,9 +152,9 @@ def get_information(domain):
     
     try:
         site = requests.get('http://{}'.format(domain))
-        information['server'] = site.headers['server']
+        information['SRV'] = site.headers['server']
     except:
-        information['server'] = ''
+        information['SRV'] = ''
 
     # get php version
     try:
@@ -140,52 +165,52 @@ def get_information(domain):
             php = ''
     except:
         php = ''
-    information['php'] = php
+    information['PHP'] = php
 
     # get expiry date
     try:
-        information['exp'] = whois['expiration_date'][0].strftime("%Y-%m-%d")
+        information['EXP'] = whois['expiration_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
-        information['exp'] = ''
+        information['EXP'] = ''
 
     # get modified
     try:
-        information['mod'] = whois['updated_date'][0].strftime("%Y-%m-%d")
+        information['MOD'] = whois['updated_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
-        information['mod'] = ''
+        information['MOD'] = ''
 
     # get status
     try:
         status = ','.join(whois['status'])
     except (KeyError, TypeError):
         status = ''
-    information['status'] = status
+    information['STAT'] = status
 
     try:
         reg = ' '.join(whois['registrar'])
     except (KeyError, TypeError):
         reg = ''
-    information['reg'] = reg
+    information['REG'] = reg
 
     try:
         ns_ = ' '.join(whois['nameservers'])
     except (KeyError, TypeError):
         ns_ = ''
-    information['dns'] = ns_
+    information['DNS'] = ns_
 
     # get ip from domain
     try:
         answers = res.query(domain)
         for rdata in answers:
             ips.append(rdata.address)
-        information['ip'] = ' / '.join(ips)
+        information['IP'] = ' / '.join(ips)
 
         # get host from ip
         try:
             host = socket.gethostbyaddr(ips[0])[0]
         except socket.error:
             host = ''
-        information['host'] = host
+        information['HOST'] = host
 
         # get name from ip
         try:
@@ -200,22 +225,41 @@ def get_information(domain):
                 org = whois_2['emails'][0]
             except (KeyError, TypeError):
                 org = ''
-        information['org'] = org
+        information['ORG'] = org
 
     except dns.resolver.NXDOMAIN:
-        information['err'] = 'ERR\tNo such domain (NXDOMAIN)'
+        information['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
     except dns.resolver.Timeout:
-        information['err'] = 'ERR\tTimeout'
+        information['ERR'] = 'ERR\tTimeout'
     except dns.exception.DNSException:
-        information['err'] = 'ERR\tDNSException'
+        information['ERR'] = 'ERR\tDNSException'
 
     mx_ = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain]).decode('unicode_escape').strip().replace('\n', '\n\t')
     if mx_:
-        information['mx'] = mx_
+        information['MX'] = mx_
     else:
-        information['mx'] = ''
+        information['MX'] = ''
 
-    information['txt'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain]).decode('unicode_escape').strip().replace('\n', '\n\t')
+    # get mx host
+    if(information['MX']):
+        try:
+            information['MXH'] = re.findall('([a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9]{1,}\.?[a-zA-Z0-9]{0,})',information['MX'])[0]
+        except IndexError:
+            if('mx' in information['MX'].lower()):
+                information['MXH'] = information['name']
+            else:
+                information['MXH'] = ''
+        try:
+            ips = []
+            mx_answers = res.query(information['MXH'])
+            for rdata in mx_answers:
+                ips.append(rdata.address)
+            information['MXIP'] = ips[0]
+        except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
+            information['MXIP'] = ''
+            
+
+    information['TXT'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain]).decode('unicode_escape').strip().replace('\n', '\n\t')
 
     return information
 
@@ -228,8 +272,12 @@ def output_console(information, suggestions):
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], value))
         else:
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], UNKNOWN))
-    for suggestion in suggestions:
-        print(suggestion)
+    for error_msg in suggestions['errors']:
+        print('{}{}{}{}'.format(COLOR['bold'], COLOR['red'], error_msg, COLOR['end']))
+    for varning_msg in suggestions['varning']:
+        print('{}{}{}{}'.format(COLOR['bold'], COLOR['yellow'], varning_msg, COLOR['end']))
+    for notice_msg in suggestions['notice']:
+        print('{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
 #test
 
 if __name__ == "__main__":
