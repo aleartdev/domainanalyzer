@@ -4,20 +4,18 @@
 import sys
 import socket
 import subprocess
+import time
+import urllib
+import re
 import requests
 import pythonwhois
 import dns
 from dns import resolver
 import lxml.html
-import urllib
-import re
-import time
 
-# This fix needs to be used on net.py in pythonwhois on your local computer to correctly handle non standard characters
+# This fix needs to be used on net.py in pythonwhois on your local computer
+# to correctly handle non standard characters
 # https://github.com/joepie91/python-whois/pull/59
-
-# TODO: host agnostic 'varning mx ip dont match' compare TLD of host of DNS A and DNS MX ant throw notice for diff
-# TODO: org name on mx host
 
 # Settings
 UNKNOWN = r''
@@ -56,32 +54,36 @@ def main():
 
 def analyze(information, problem):
     """Get suggestions what can be fixed"""
-    suggestions = {'errors':[],'varning':[],'notice':[]}
+    suggestions = {'errors':[], 'varning':[], 'notice':[]}
 
     # varning status
-    if('ok' not in information['STAT']):
+    if 'ok' not in information['STAT']:
         suggestions['errors'].append('Status code not OK!')
-    
-    # notice ssl 
-    if(information['SSL'] == 'No'):
-        suggestions['notice'].append('No SSL detected!')
 
-    # varning spf 
-    if('spf' not in information['TXT'].lower()):
+    # notice ssl
+    if information['SSL'] == 'No':
+        if problem == 'ssl':
+            suggestions['error'].append('No SSL detected!')
+        else:
+            suggestions['notice'].append('No SSL detected!')
+
+    # varning spf
+    if 'spf' not in information['TXT'].lower():
         suggestions['varning'].append('No SPF record!')
-    
+
     # php
-    if('5.' in information['PHP']):
+    if '5.' in information['PHP']:
         suggestions['varning'].append('Low PHP version!')
-    if(information['PHP']==''):
+    if information['PHP'] == '':
         suggestions['notice'].append('PHP version not detected!')
 
-    # varning mx ip dont match 
-    if(information['MX'] and (information['IP'] != information['MXIP'])):
-        if(information['MXIP']==''):
+    # varning mx ip dont match
+    if information['MX'] and (information['IP'] != information['MXIP']):
+        if information['MXIP'] == '':
             suggestions['varning'].append('MX host IP lookup failed!')
         else:
-            if('oderland' in information['MXH'].lower() and 'oderland' in information['HOST'].lower()):
+            # TODO: compare TLD of host of DNS A and DNS MX ant throw notice for diff
+            if 'oderland' in information['MXH'].lower() and 'oderland' in information['HOST'].lower():
                 pass
             else:
                 suggestions['notice'].append('Site and mail on different IP!')
@@ -108,7 +110,7 @@ def get_information(domain):
 
     # get only domain name
     information['name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
-    
+
     # use only domain name for rest of the script
     domain = information['name']
 
@@ -135,8 +137,8 @@ def get_information(domain):
 
     # get Wordpress admin login status code
     try:
-        r = requests.get('http://{}/wp-admin'.format(domain))
-        if(r.status_code == 200):
+        result = requests.get('http://{}/wp-admin'.format(domain))
+        if result.status_code == 200:
             information['WP'] = True
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
         information['WP'] = False
@@ -149,22 +151,22 @@ def get_information(domain):
         information['SPEED'] = '{} ms'.format(time_end - time_start)
         site = lxml.html.parse(html)
         information['TITLE'] = site.find(".//title").text
-    except urllib.error.HTTPError as e:
+    except urllib.error.HTTPError as error:
         information['TITLE'] = ''
         information['SPEED'] = ''
-        information['ERR3'] = 'Unable to get site {}'.format(e)
+        information['ERR3'] = 'Unable to get site {}'.format(error)
 
     # get SSL cert
     try:
-        cert = requests.get('https://{}'.format(domain), verify=True)
+        requests.get('https://{}'.format(domain), verify=True)
         information['SSL'] = 'Yes'
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
         information['SSL'] = 'No'
-    
+
     try:
         site = requests.get('http://{}'.format(domain))
         information['SRV'] = site.headers['server']
-    except:
+    except requests.exceptions.RequestException as error:
         information['SRV'] = ''
 
     # get php version
@@ -172,11 +174,11 @@ def get_information(domain):
         result = requests.get('http://{}'.format(domain))
         try:
             php = result.headers['X-Powered-By']
-            if('php' not in php.lower()):
+            if 'php' not in php.lower():
                 php = ''
         except KeyError:
             php = ''
-    except:
+    except requests.exceptions.RequestException as error:
         php = ''
     information['PHP'] = php
 
@@ -228,9 +230,9 @@ def get_information(domain):
         # get name from ip
         try:
             whois_2 = pythonwhois.get_whois(ips[0], True)
-        except (UnicodeDecodeError, ValueError) as e:
+        except (UnicodeDecodeError, ValueError) as error:
             whois_2 = False
-            information['ERR2'] = 'Python whois DecodeError (IP) {}'.format(e)
+            information['ERR2'] = 'Python whois DecodeError (IP) {}'.format(error)
         try:
             org = whois_2['contacts']['registrant']['name']
         except (KeyError, TypeError):
@@ -247,18 +249,20 @@ def get_information(domain):
     except dns.exception.DNSException:
         information['ERR'] = 'ERR\tDNSException'
 
-    mx_ = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain_dig]).decode('unicode_escape').strip().replace('\n', '\n\t')
+    dig_mx_result = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain_dig])
+    mx_ = dig_mx_result.decode('unicode_escape').strip().replace('\n', '\n\t')
     if mx_:
         information['MX'] = mx_
     else:
         information['MX'] = ''
 
     # get mx host
-    if(information['MX']):
+    if information['MX']:
         try:
-            information['MXH'] = re.findall('([a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9]{1,}\.?[a-zA-Z0-9]{0,})',information['MX'])[0]
+            re_domain = r'([a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9]{1,}\.?[a-zA-Z0-9]{0,})'
+            information['MXH'] = re.findall(re_domain, information['MX'])[0]
         except IndexError:
-            if('mx' in information['MX'].lower()):
+            if 'mx' in information['MX'].lower():
                 information['MXH'] = information['name']
             else:
                 information['MXH'] = ''
@@ -270,15 +274,15 @@ def get_information(domain):
             information['MXIP'] = ips[0]
         except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
             information['MXIP'] = ''
-        
-        if(information['MXIP']):
+
+        if information['MXIP']:
             # get org name from MXIP
             try:
                 whois_3 = pythonwhois.get_whois(information['MXIP'], True)
-                
-            except (UnicodeDecodeError, ValueError) as e:
+
+            except (UnicodeDecodeError, ValueError) as error:
                 whois_3 = False
-                information['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(e)
+                information['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(error)
             try:
                 mxorg = whois_3['contacts']['registrant']['name']
             except (KeyError, TypeError):
@@ -289,9 +293,9 @@ def get_information(domain):
             information['MXORG'] = mxorg
         else:
             information['MXORG'] = ''
-        
 
-    
+
+
     # check host of MXIP
         try:
             information['MXH2'] = socket.gethostbyaddr(information['MXIP'])[0]
@@ -301,9 +305,10 @@ def get_information(domain):
         information['MXH2'] = ''
         information['MXORG'] = ''
 
-            
+
     # dig +noall +answer TXT domain
-    information['TXT'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain_dig]).decode('unicode_escape').strip().replace('\n', '\n\t')
+    dig_txt_result = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain_dig])
+    information['TXT'] = dig_txt_result.decode('unicode_escape').strip().replace('\n', '\n\t')
 
     return information
 
@@ -311,7 +316,7 @@ def output_console(information, suggestions):
     """output suggestions to console"""
     for key, value in information.items():
         if value:
-            if(value == True):
+            if value is True:
                 value = 'Yes'
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], value))
         else:
