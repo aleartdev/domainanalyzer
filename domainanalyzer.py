@@ -11,11 +11,13 @@ from dns import resolver
 import lxml.html
 import urllib
 import re
+import time
 
 # This fix needs to be used on net.py in pythonwhois on your local computer to correctly handle non standard characters
 # https://github.com/joepie91/python-whois/pull/59
 
-# TODO: Better title parser
+# TODO: host agnostic 'varning mx ip dont match' compare TLD of host of DNS A and DNS MX ant throw notice for diff
+# TODO: org name on mx host
 
 # Settings
 UNKNOWN = r''
@@ -77,12 +79,12 @@ def analyze(information, problem):
     # varning mx ip dont match 
     if(information['MX'] and (information['IP'] != information['MXIP'])):
         if(information['MXIP']==''):
-            suggestions['varning'].append('MX host lookup failed!')
+            suggestions['varning'].append('MX host IP lookup failed!')
         else:
             if('oderland' in information['MXH'].lower() and 'oderland' in information['HOST'].lower()):
                 pass
             else:
-                suggestions['notice'].append('External mail detected!')
+                suggestions['notice'].append('Site and mail on different IP!')
 
     return suggestions
 
@@ -141,11 +143,16 @@ def get_information(domain):
 
     # get main site status code
     try:
+        time_start = int(round(time.time() * 1000))
         html = urllib.request.urlopen('http://{}'.format(domain))
+        time_end = int(round(time.time() * 1000))
+        information['SPEED'] = '{} ms'.format(time_end - time_start)
         site = lxml.html.parse(html)
         information['TITLE'] = site.find(".//title").text
-    except urllib.error.HTTPError:
+    except urllib.error.HTTPError as e:
         information['TITLE'] = ''
+        information['SPEED'] = ''
+        information['ERR3'] = 'Unable to get site {}'.format(e)
 
     # get SSL cert
     try:
@@ -165,7 +172,7 @@ def get_information(domain):
         result = requests.get('http://{}'.format(domain))
         try:
             php = result.headers['X-Powered-By']
-            if('php' not in php):
+            if('php' not in php.lower()):
                 php = ''
         except KeyError:
             php = ''
@@ -263,6 +270,34 @@ def get_information(domain):
             information['MXIP'] = ips[0]
         except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
             information['MXIP'] = ''
+
+        # get org name from MXIP
+        try:
+            whois_3 = pythonwhois.get_whois(information['MXIP'], True)
+            
+        except (UnicodeDecodeError, ValueError) as e:
+            whois_3 = False
+            information['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(e)
+        try:
+            mxorg = whois_3['contacts']['registrant']['name']
+        except (KeyError, TypeError):
+            try:
+                mxorg = whois_3['emails'][0]
+            except (KeyError, TypeError):
+                mxorg = ''
+        information['MXORG'] = mxorg
+        
+
+    
+    # check host of MXIP
+        try:
+            information['MXH2'] = socket.gethostbyaddr(information['MXIP'])[0]
+        except socket.error:
+            information['MXH2'] = ''
+    else:
+        information['MXH2'] = ''
+        information['MXORG'] = ''
+
             
     # dig +noall +answer TXT domain
     information['TXT'] = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain_dig]).decode('unicode_escape').strip().replace('\n', '\n\t')
