@@ -270,22 +270,25 @@ def get_information(domain):
             information['MXIP'] = ips[0]
         except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
             information['MXIP'] = ''
-
-        # get org name from MXIP
-        try:
-            whois_3 = pythonwhois.get_whois(information['MXIP'], True)
-            
-        except (UnicodeDecodeError, ValueError) as e:
-            whois_3 = False
-            information['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(e)
-        try:
-            mxorg = whois_3['contacts']['registrant']['name']
-        except (KeyError, TypeError):
+        
+        if(information['MXIP']):
+            # get org name from MXIP
             try:
-                mxorg = whois_3['emails'][0]
+                whois_3 = pythonwhois.get_whois(information['MXIP'], True)
+                
+            except (UnicodeDecodeError, ValueError) as e:
+                whois_3 = False
+                information['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(e)
+            try:
+                mxorg = whois_3['contacts']['registrant']['name']
             except (KeyError, TypeError):
-                mxorg = ''
-        information['MXORG'] = mxorg
+                try:
+                    mxorg = whois_3['emails'][0]
+                except (KeyError, TypeError):
+                    mxorg = ''
+            information['MXORG'] = mxorg
+        else:
+            information['MXORG'] = ''
         
 
     
