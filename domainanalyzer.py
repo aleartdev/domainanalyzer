@@ -21,6 +21,7 @@ import lxml.html
 # TODO: stackoverflow.com fix MXH to complete domain name
 # TODO: make the script run in Docker instead
 
+
 # Settings
 UNKNOWN = r''
 RESOVING_NAMESERVER = '8.8.8.8'
