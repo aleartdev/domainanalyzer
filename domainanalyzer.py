@@ -20,7 +20,7 @@ import lxml.html
 
 # TODO: stackoverflow.com fix MXH to complete domain name
 # TODO: make the script run in Docker instead
-
+# TODO: get all external data trough threads in beginning of script
 
 # Settings
 UNKNOWN = r''
