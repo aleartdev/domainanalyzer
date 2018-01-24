@@ -6,6 +6,7 @@ import socket
 import subprocess
 import time
 import urllib
+#from urllib.request import urlopen
 import re
 import requests
 import pythonwhois
@@ -145,16 +146,21 @@ def get_information(domain):
 
     # get main site status code
     try:
-        time_start = int(round(time.time() * 1000))
         html = urllib.request.urlopen('http://{}'.format(domain))
-        time_end = int(round(time.time() * 1000))
-        information['SPEED'] = '{} ms'.format(time_end - time_start)
         site = lxml.html.parse(html)
         information['TITLE'] = site.find(".//title").text
     except urllib.error.HTTPError as error:
         information['TITLE'] = ''
         information['SPEED'] = ''
         information['ERR3'] = 'Unable to get site {}'.format(error)
+
+    try:
+        result = page_speed('http://{}'.format(domain))
+        information['TTFB'] = '{} ms'.format(result['ttfb'])
+        information['TTLB'] = '{} ms'.format(result['ttlb'])
+    except:
+        information['TTFB'] = ''
+        information['TTLB'] = ''
 
     # get SSL cert
     try:
@@ -327,7 +333,20 @@ def output_console(information, suggestions):
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['yellow'], varning_msg, COLOR['end']))
     for notice_msg in suggestions['notice']:
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
-#test
+
+def page_speed(url):
+    opener = urllib.request.build_opener()
+    request = urllib.request.Request(url)
+
+    start = int(round(time.time() * 1000))
+    resp = opener.open(request)
+    # read one byte
+    resp.read(1)
+    ttfb = int(round(time.time() * 1000)) - start
+    # read the rest
+    resp.read()
+    ttlb = int(round(time.time() * 1000)) - start
+    return {'ttfb': ttfb, 'ttlb': ttlb}
 
 if __name__ == "__main__":
     main()
