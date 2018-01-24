@@ -18,6 +18,9 @@ import lxml.html
 # to correctly handle non standard characters
 # https://github.com/joepie91/python-whois/pull/59
 
+# TODO: stackoverflow.com fix MXH to complete domain name
+# TODO: make the script run in Docker instead
+
 # Settings
 UNKNOWN = r''
 RESOVING_NAMESERVER = '8.8.8.8'
@@ -55,11 +58,11 @@ def main():
 
 def analyze(information, problem):
     """Get suggestions what can be fixed"""
-    suggestions = {'errors':[], 'varning':[], 'notice':[]}
+    suggestions = {'error':[], 'varning':[], 'notice':[]}
 
     # varning status
     if 'ok' not in information['STAT']:
-        suggestions['errors'].append('Status code not OK!')
+        suggestions['error'].append('Status code not OK!')
 
     # notice ssl
     if information['SSL'] == 'No':
@@ -70,7 +73,11 @@ def analyze(information, problem):
 
     # varning spf
     if 'spf' not in information['TXT'].lower():
-        suggestions['varning'].append('No SPF record!')
+        if problem == 'mail':
+            suggestions['error'].append('No SPF record!')
+        else:
+            suggestions['varning'].append('No SPF record!')
+
 
     # php
     if '5.' in information['PHP']:
@@ -171,7 +178,10 @@ def get_information(domain):
 
     try:
         site = requests.get('http://{}'.format(domain))
-        information['SRV'] = site.headers['server']
+        try:
+            information['SRV'] = site.headers['server']
+        except KeyError:
+            information['SRV'] = ''
     except requests.exceptions.RequestException as error:
         information['SRV'] = ''
 
@@ -184,6 +194,11 @@ def get_information(domain):
                 php = ''
         except KeyError:
             php = ''
+        try:
+            size = round(int(result.headers['Content-length'])/1024)
+            information['SIZE'] = '{} kB'.format(size)
+        except KeyError:
+            information['SIZE'] = ''
     except requests.exceptions.RequestException as error:
         php = ''
     information['PHP'] = php
@@ -327,7 +342,7 @@ def output_console(information, suggestions):
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], value))
         else:
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], UNKNOWN))
-    for error_msg in suggestions['errors']:
+    for error_msg in suggestions['error']:
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['red'], error_msg, COLOR['end']))
     for varning_msg in suggestions['varning']:
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['yellow'], varning_msg, COLOR['end']))
@@ -335,6 +350,7 @@ def output_console(information, suggestions):
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
 
 def page_speed(url):
+    """get ttfb and ttlb from url"""
     opener = urllib.request.build_opener()
     request = urllib.request.Request(url)
 
