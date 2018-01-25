@@ -61,6 +61,8 @@ def analyze(information, problem):
     """Get suggestions what can be fixed"""
     suggestions = {'error':[], 'varning':[], 'notice':[]}
 
+    # TODO: if mx on other ip then varning on ssl problem. 
+
     # varning status
     if 'ok' not in information['STAT']:
         suggestions['error'].append('Status code not OK!')
@@ -157,7 +159,7 @@ def get_information(domain):
         html = urllib.request.urlopen('http://{}'.format(domain))
         site = lxml.html.parse(html)
         information['TITLE'] = site.find(".//title").text
-    except urllib.error.HTTPError as error:
+    except (urllib.error.HTTPError, ConnectionResetError) as error:
         information['TITLE'] = ''
         information['SPEED'] = ''
         information['ERR3'] = 'Unable to get site {}'.format(error)
