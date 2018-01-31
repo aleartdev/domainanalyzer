@@ -21,6 +21,7 @@ import lxml.html
 # TODO: stackoverflow.com fix MXH to complete domain name
 # TODO: make the script run in Docker instead
 # TODO: get all external data trough threads in beginning of script
+# TODO: dont check non domain first argument, exit with notice
 
 # Settings
 UNKNOWN = r''
@@ -64,8 +65,15 @@ def analyze(information, problem):
     # TODO: if mx on other ip then varning on ssl problem. 
 
     # varning status
-    if 'ok' not in information['STAT']:
-        suggestions['error'].append('Status code not OK!')
+    if 'ok' not in information['STAT'] and 'transfer' not in information['STAT'].lower():
+        suggestions['error'].append('Domain status code not OK!')
+
+    # notice status
+    if 'transfer' in information['STAT'].lower():
+        suggestions['notice'].append('Domain transfer status code!')
+    else:
+        if 'ok' not in information['STAT'].lower():
+            suggestions['error'].append('Domain status code not OK!')
 
     # notice ssl
     if information['SSL'] == 'No':
@@ -121,6 +129,7 @@ def get_information(domain):
 
     # get only domain name
     information['name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
+    #information['name'] = domain.split("@")[-1] if '@' in domain else domain
 
     # use only domain name for rest of the script
     domain = information['name']
