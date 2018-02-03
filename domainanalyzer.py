@@ -13,7 +13,7 @@ import pythonwhois
 import dns
 from dns import resolver
 import lxml.html
-import threading
+import asyncio
 
 # This fix needs to be used on net.py in pythonwhois on your local computer
 # to correctly handle non standard characters
@@ -42,12 +42,86 @@ COLOR = {
     'end': '\033[0m'
 }
 
+INFORMATION = {}
+
+@asyncio.coroutine
+def get_whois(domain):
+    """get whois from domain name"""
+    try:
+        whois = pythonwhois.get_whois(domain, True)
+        return whois
+    except UnicodeDecodeError:
+        INFORMATION['ERR1'] = 'Python whois UnicodeDecodeError (Domain)'
+        return False
+
+@asyncio.coroutine
+def get_wpadmin(domain):
+    """get Wordpress admin login status code"""
+    try:
+        result = requests.get('http://{}/wp-admin'.format(domain))
+        if result.status_code == 200:
+            INFORMATION['WP'] = True
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        INFORMATION['WP'] = False
+
+@asyncio.coroutine
+def get_statuscodes(domain):
+    """get main site status code"""
+    try:
+        html = urllib.request.urlopen('http://{}'.format(domain))
+        site = lxml.html.parse(html)
+        INFORMATION['TITLE'] = site.find(".//title").text
+    except (urllib.error.HTTPError, ConnectionResetError) as error:
+        INFORMATION['TITLE'] = ''
+        INFORMATION['SPEED'] = ''
+        INFORMATION['ERR3'] = 'Unable to get site {}'.format(error)
+
+@asyncio.coroutine
+def get_ssl(domain):
+    """get SSL cert"""
+    try:
+        requests.get('https://{}'.format(domain), verify=True)
+        INFORMATION['SSL'] = 'Yes'
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        INFORMATION['SSL'] = 'No'
+
+@asyncio.coroutine
+def get_srv(domain):
+    """get server information """
+    try:
+        site = requests.get('http://{}'.format(domain))
+        try:
+            INFORMATION['SRV'] = site.headers['server']
+        except KeyError:
+            INFORMATION['SRV'] = ''
+    except requests.exceptions.RequestException as error:
+        INFORMATION['SRV'] = ''
+
+@asyncio.coroutine
+def get_php(domain):
+    """get php version"""
+    try:
+        result = requests.get('http://{}'.format(domain))
+        try:
+            php = result.headers['X-Powered-By']
+            if 'php' not in php.lower():
+                php = ''
+        except KeyError:
+            php = ''
+        try:
+            size = round(int(result.headers['Content-length'])/1024)
+            INFORMATION['SIZE'] = '{} kB'.format(size)
+        except KeyError:
+            INFORMATION['SIZE'] = ''
+    except requests.exceptions.RequestException as error:
+        php = ''
+    INFORMATION['PHP'] = php
+
+    # get php version
+
+
 def main():
     """Main function"""
-
-    thread1 = threading.Thread(name='thread1', target=daemon)
-    thread1.setDaemon(True)
-
 
     # get the domain from arguments
     domain = get_argument(1, None)
@@ -56,40 +130,40 @@ def main():
     problem = get_argument(2, None)
 
     # get information about the domain
-    information = get_information(domain) if domain else {}
+    get_information(domain) if domain else {}
 
     # get suggestions on how to fix the domains problem
-    suggestions = analyze(information, problem) if domain else {}
+    suggestions = analyze(problem) if domain else {}
 
     # communicate information and suggestions to user
-    output_console(information, suggestions)
+    output_console(suggestions)
 
-def analyze(information, problem):
+def analyze(problem):
     """Get suggestions what can be fixed"""
     suggestions = {'error':[], 'varning':[], 'notice':[]}
 
     # TODO: if mx on other ip then varning on ssl problem. 
 
     # varning status
-    if 'ok' not in information['STAT'] and 'transfer' not in information['STAT'].lower():
+    if 'ok' not in INFORMATION['STAT'] and 'transfer' not in INFORMATION['STAT'].lower():
         suggestions['error'].append('Domain status code not OK!')
 
     # notice status
-    if 'transfer' in information['STAT'].lower():
+    if 'transfer' in INFORMATION['STAT'].lower():
         suggestions['notice'].append('Domain transfer status code!')
     else:
-        if 'ok' not in information['STAT'].lower():
+        if 'ok' not in INFORMATION['STAT'].lower():
             suggestions['error'].append('Domain status code not OK!')
 
     # notice ssl
-    if information['SSL'] == 'No':
+    if INFORMATION['SSL'] == 'No':
         if problem == 'ssl':
             suggestions['error'].append('No SSL detected!')
         else:
             suggestions['notice'].append('No SSL detected!')
 
     # varning spf
-    if 'spf' not in information['TXT'].lower():
+    if 'spf' not in INFORMATION['TXT'].lower():
         if problem == 'mail':
             suggestions['error'].append('No SPF record!')
         else:
@@ -97,18 +171,18 @@ def analyze(information, problem):
 
 
     # php
-    if '5.' in information['PHP']:
+    if '5.' in INFORMATION['PHP']:
         suggestions['varning'].append('Low PHP version!')
-    if information['PHP'] == '':
+    if INFORMATION['PHP'] == '':
         suggestions['notice'].append('PHP version not detected!')
 
     # varning mx ip dont match
-    if information['MX'] and (information['IP'] != information['MXIP']):
-        if information['MXIP'] == '':
+    if INFORMATION['MX'] and (INFORMATION['IP'] != INFORMATION['MXIP']):
+        if INFORMATION['MXIP'] == '':
             suggestions['varning'].append('MX host IP lookup failed!')
         else:
             # TODO: compare TLD of host of DNS A and DNS MX ant throw notice for diff
-            if 'oderland' in information['MXH'].lower() and 'oderland' in information['HOST'].lower():
+            if 'oderland' in INFORMATION['MXH'].lower() and 'oderland' in INFORMATION['HOST'].lower():
                 pass
             else:
                 suggestions['notice'].append('Site and mail on different IP!')
@@ -134,11 +208,11 @@ def get_information(domain):
     res.nameservers = [RESOVING_NAMESERVER]
 
     # get only domain name
-    information['name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
-    #information['name'] = domain.split("@")[-1] if '@' in domain else domain
+    INFORMATION['name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
+    #INFORMATION['name'] = domain.split("@")[-1] if '@' in domain else domain
 
     # use only domain name for rest of the script
-    domain = information['name']
+    domain = INFORMATION['name']
 
     # get punycode
     try:
@@ -149,129 +223,69 @@ def get_information(domain):
         domain_dig = domain_punycode
     else:
         domain_punycode = ''
-    information['IDN'] = domain_punycode
+    INFORMATION['IDN'] = domain_punycode
 
     # init ip list for domain
     ips = []
 
+    loop = asyncio.get_event_loop()
     # get whois from domain name
-    try:
-        whois = pythonwhois.get_whois(domain, True)
-    except UnicodeDecodeError:
-        whois = False
-        information['ERR1'] = 'Python whois UnicodeDecodeError (Domain)'
-
-    # get Wordpress admin login status code
-    try:
-        result = requests.get('http://{}/wp-admin'.format(domain))
-        if result.status_code == 200:
-            information['WP'] = True
-    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
-        information['WP'] = False
-
-    # get main site status code
-    try:
-        html = urllib.request.urlopen('http://{}'.format(domain))
-        site = lxml.html.parse(html)
-        information['TITLE'] = site.find(".//title").text
-    except (urllib.error.HTTPError, ConnectionResetError) as error:
-        information['TITLE'] = ''
-        information['SPEED'] = ''
-        information['ERR3'] = 'Unable to get site {}'.format(error)
-
-    try:
-        result = page_speed('http://{}'.format(domain))
-        information['TTFB'] = '{} ms'.format(result['ttfb'])
-        information['TTLB'] = '{} ms'.format(result['ttlb'])
-    except:
-        information['TTFB'] = ''
-        information['TTLB'] = ''
-
-    # get SSL cert
-    try:
-        requests.get('https://{}'.format(domain), verify=True)
-        information['SSL'] = 'Yes'
-    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
-        information['SSL'] = 'No'
-
-    try:
-        site = requests.get('http://{}'.format(domain))
-        try:
-            information['SRV'] = site.headers['server']
-        except KeyError:
-            information['SRV'] = ''
-    except requests.exceptions.RequestException as error:
-        information['SRV'] = ''
-
-    # get php version
-    try:
-        result = requests.get('http://{}'.format(domain))
-        try:
-            php = result.headers['X-Powered-By']
-            if 'php' not in php.lower():
-                php = ''
-        except KeyError:
-            php = ''
-        try:
-            size = round(int(result.headers['Content-length'])/1024)
-            information['SIZE'] = '{} kB'.format(size)
-        except KeyError:
-            information['SIZE'] = ''
-    except requests.exceptions.RequestException as error:
-        php = ''
-    information['PHP'] = php
+    tasks = get_whois(domain), get_wpadmin(domain), get_statuscodes(domain), page_speed(domain), get_ssl(domain), get_srv(domain), get_php(domain)
+    
+    whois, wp_result, statuscodes, speed, ssl, srv, php = loop.run_until_complete(asyncio.gather(*tasks))
+    loop.close()
 
     # get expiry date
     try:
-        information['EXP'] = whois['expiration_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['EXP'] = whois['expiration_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
-        information['EXP'] = ''
+        INFORMATION['EXP'] = ''
 
     # get modified
     try:
-        information['MOD'] = whois['updated_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['MOD'] = whois['updated_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
-        information['MOD'] = ''
+        INFORMATION['MOD'] = ''
 
     # get status
     try:
         status = ','.join(whois['status'])
     except (KeyError, TypeError):
         status = ''
-    information['STAT'] = status
+    INFORMATION['STAT'] = status
 
     try:
         reg = ' '.join(whois['registrar'])
     except (KeyError, TypeError):
         reg = ''
-    information['REG'] = reg
+    INFORMATION['REG'] = reg
 
     try:
         ns_ = ' '.join(whois['nameservers'])
     except (KeyError, TypeError):
         ns_ = ''
-    information['DNS'] = ns_
+    INFORMATION['DNS'] = ns_
 
     # get ip from domain
     try:
         answers = res.query(domain)
         for rdata in answers:
             ips.append(rdata.address)
-        information['IP'] = ' / '.join(ips)
+        INFORMATION['IP'] = ' / '.join(ips)
 
         # get host from ip
         try:
             host = socket.gethostbyaddr(ips[0])[0]
         except socket.error:
             host = ''
-        information['HOST'] = host
+        INFORMATION['HOST'] = host
 
         # get name from ip
         try:
             whois_2 = pythonwhois.get_whois(ips[0], True)
         except (UnicodeDecodeError, ValueError) as error:
             whois_2 = False
-            information['ERR2'] = 'Python whois DecodeError (IP) {}'.format(error)
+            INFORMATION['ERR2'] = 'Python whois DecodeError (IP) {}'.format(error)
         try:
             org = whois_2['contacts']['registrant']['name']
         except (KeyError, TypeError):
@@ -279,49 +293,49 @@ def get_information(domain):
                 org = whois_2['emails'][0]
             except (KeyError, TypeError):
                 org = ''
-        information['ORG'] = org
+        INFORMATION['ORG'] = org
 
     except dns.resolver.NXDOMAIN:
-        information['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
+        INFORMATION['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
     except dns.resolver.Timeout:
-        information['ERR'] = 'ERR\tTimeout'
+        INFORMATION['ERR'] = 'ERR\tTimeout'
     except dns.exception.DNSException:
-        information['ERR'] = 'ERR\tDNSException'
+        INFORMATION['ERR'] = 'ERR\tDNSException'
 
-    dig_mx_result = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain_dig])
+    dig_mx_result = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain])
     mx_ = dig_mx_result.decode('unicode_escape').strip().replace('\n', '\n\t')
     if mx_:
-        information['MX'] = mx_
+        INFORMATION['MX'] = mx_
     else:
-        information['MX'] = ''
+        INFORMATION['MX'] = ''
 
     # get mx host
-    if information['MX']:
+    if INFORMATION['MX']:
         try:
             re_domain = r'([a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9]{1,}\.?[a-zA-Z0-9]{0,})'
-            information['MXH'] = re.findall(re_domain, information['MX'])[0]
+            INFORMATION['MXH'] = re.findall(re_domain, INFORMATION['MX'])[0]
         except IndexError:
-            if 'mx' in information['MX'].lower():
-                information['MXH'] = information['name']
+            if 'mx' in INFORMATION['MX'].lower():
+                INFORMATION['MXH'] = INFORMATION['name']
             else:
-                information['MXH'] = ''
+                INFORMATION['MXH'] = ''
         try:
             ips = []
-            mx_answers = res.query(information['MXH'])
+            mx_answers = res.query(INFORMATION['MXH'])
             for rdata in mx_answers:
                 ips.append(rdata.address)
-            information['MXIP'] = ips[0]
+            INFORMATION['MXIP'] = ips[0]
         except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
-            information['MXIP'] = ''
+            INFORMATION['MXIP'] = ''
 
-        if information['MXIP']:
+        if INFORMATION['MXIP']:
             # get org name from MXIP
             try:
-                whois_3 = pythonwhois.get_whois(information['MXIP'], True)
+                whois_3 = pythonwhois.get_whois(INFORMATION['MXIP'], True)
 
             except (UnicodeDecodeError, ValueError) as error:
                 whois_3 = False
-                information['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(error)
+                INFORMATION['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(error)
             try:
                 mxorg = whois_3['contacts']['registrant']['name']
             except (KeyError, TypeError):
@@ -329,31 +343,29 @@ def get_information(domain):
                     mxorg = whois_3['emails'][0]
                 except (KeyError, TypeError):
                     mxorg = ''
-            information['MXORG'] = mxorg
+            INFORMATION['MXORG'] = mxorg
         else:
-            information['MXORG'] = ''
+            INFORMATION['MXORG'] = ''
 
 
 
     # check host of MXIP
         try:
-            information['MXH2'] = socket.gethostbyaddr(information['MXIP'])[0]
+            INFORMATION['MXH2'] = socket.gethostbyaddr(INFORMATION['MXIP'])[0]
         except socket.error:
-            information['MXH2'] = ''
+            INFORMATION['MXH2'] = ''
     else:
-        information['MXH2'] = ''
-        information['MXORG'] = ''
+        INFORMATION['MXH2'] = ''
+        INFORMATION['MXORG'] = ''
 
 
     # dig +noall +answer TXT domain
     dig_txt_result = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain_dig])
-    information['TXT'] = dig_txt_result.decode('unicode_escape').strip().replace('\n', '\n\t')
+    INFORMATION['TXT'] = dig_txt_result.decode('unicode_escape').strip().replace('\n', '\n\t')
 
-    return information
-
-def output_console(information, suggestions):
+def output_console(suggestions):
     """output suggestions to console"""
-    for key, value in information.items():
+    for key, value in INFORMATION.items():
         if value:
             if value is True:
                 value = 'Yes'
@@ -367,8 +379,10 @@ def output_console(information, suggestions):
     for notice_msg in suggestions['notice']:
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
 
-def page_speed(url):
+@asyncio.coroutine
+def page_speed(domain):
     """get ttfb and ttlb from url"""
+    url = 'http://{}'.format(domain)
     opener = urllib.request.build_opener()
     request = urllib.request.Request(url)
 
@@ -376,11 +390,10 @@ def page_speed(url):
     resp = opener.open(request)
     # read one byte
     resp.read(1)
-    ttfb = int(round(time.time() * 1000)) - start
+    INFORMATION['TTFB_MS'] = int(round(time.time() * 1000)) - start
     # read the rest
     resp.read()
-    ttlb = int(round(time.time() * 1000)) - start
-    return {'ttfb': ttfb, 'ttlb': ttlb}
+    INFORMATION['TTLB_MS'] = int(round(time.time() * 1000)) - start
 
 if __name__ == "__main__":
     main()
