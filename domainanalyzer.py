@@ -22,6 +22,7 @@ import lxml.html
 # TODO: make the script run in Docker instead
 # TODO: get all external data trough threads in beginning of script
 # TODO: dont check non domain first argument, exit with notice
+# threadding branch
 
 # Settings
 UNKNOWN = r''
