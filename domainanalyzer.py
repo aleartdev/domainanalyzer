@@ -13,6 +13,7 @@ import pythonwhois
 import dns
 from dns import resolver
 import lxml.html
+import threading
 
 # This fix needs to be used on net.py in pythonwhois on your local computer
 # to correctly handle non standard characters
@@ -22,7 +23,7 @@ import lxml.html
 # TODO: make the script run in Docker instead
 # TODO: get all external data trough threads in beginning of script
 # TODO: dont check non domain first argument, exit with notice
-# threadding branch
+# threadding branch test
 
 # Settings
 UNKNOWN = r''
@@ -43,6 +44,10 @@ COLOR = {
 
 def main():
     """Main function"""
+
+    thread1 = threading.Thread(name='thread1', target=daemon)
+    thread1.setDaemon(True)
+
 
     # get the domain from arguments
     domain = get_argument(1, None)
