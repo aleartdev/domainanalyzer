@@ -117,25 +117,13 @@ def get_php(domain):
         php = ''
     INFORMATION['PHP'] = php
 
-    # get php version
-
 
 def main():
     """Main function"""
-
-    # get the domain from arguments
     domain = get_argument(1, None)
-
-    # get the problem from arguments
     problem = get_argument(2, None)
-
-    # get information about the domain
-    get_information(domain) if domain else {}
-
-    # get suggestions on how to fix the domains problem
-    suggestions = analyze(problem) if domain else {}
-
-    # communicate information and suggestions to user
+    get_information(domain)
+    suggestions = analyze(problem)
     output_console(suggestions)
 
 def analyze(problem):
