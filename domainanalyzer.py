@@ -6,14 +6,13 @@ import socket
 import subprocess
 import time
 import urllib
-#from urllib.request import urlopen
 import re
 import requests
 import pythonwhois
 import dns
 from dns import resolver
 import lxml.html
-import asyncio
+from threading import Thread
 
 # This fix needs to be used on net.py in pythonwhois on your local computer
 # to correctly handle non standard characters
@@ -21,14 +20,12 @@ import asyncio
 
 # TODO: stackoverflow.com fix MXH to complete domain name
 # TODO: make the script run in Docker instead
-# TODO: get all external data trough threads in beginning of script
 # TODO: dont check non domain first argument, exit with notice
-# threadding branch test
+# TODO: threading on all heavy lifting. Get domain IP first before heavy lift. Start all at same time and add more on certiain return?
 
-# Settings
-UNKNOWN = r''
+# SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
-
+DEBUG = True
 COLOR = {
     'purple': '\033[95m',
     'cyan': '\033[96m',
@@ -42,31 +39,64 @@ COLOR = {
     'end': '\033[0m'
 }
 
+# GLOBALS to write to from threads
+WHOIS = False
 INFORMATION = {}
 
-@asyncio.coroutine
 def get_whois(domain):
     """get whois from domain name"""
+    global WHOIS
+    if DEBUG:
+        print('get_whois start {}'.format(domain))
     try:
-        whois = pythonwhois.get_whois(domain, True)
-        return whois
+        WHOIS = pythonwhois.get_whois(domain, True)
+        if DEBUG:
+            print('get_whois stop (success)')
     except UnicodeDecodeError:
         INFORMATION['ERR1'] = 'Python whois UnicodeDecodeError (Domain)'
-        return False
+        WHOIS = False
+        if DEBUG:
+            print('get_whois stop (with error)')
 
-@asyncio.coroutine
+def get_ip(domain):
+    """get whois from domain name"""
+    if DEBUG:
+        print('get_ip start {}'.format(domain))
+    # create resolver object
+    res = resolver.Resolver()
+    res.nameservers = [RESOVING_NAMESERVER]
+    ips = []
+    try:
+        answers = res.query(domain)
+        for rdata in answers:
+            ips.append(rdata.address)
+        INFORMATION['IP'] = ips[0]
+    except dns.resolver.NXDOMAIN:
+        INFORMATION['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
+    except dns.resolver.Timeout:
+        INFORMATION['ERR'] = 'ERR\tTimeout'
+    except dns.exception.DNSException:
+        INFORMATION['ERR'] = 'ERR\tDNSException'
+    if DEBUG:
+        print('get_ip stop')
+
 def get_wpadmin(domain):
     """get Wordpress admin login status code"""
+    if DEBUG:
+        print('get_wpadmin start')
     try:
         result = requests.get('http://{}/wp-admin'.format(domain))
         if result.status_code == 200:
             INFORMATION['WP'] = True
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
         INFORMATION['WP'] = False
+    if DEBUG:
+        print('get_wpadmin stop')
 
-@asyncio.coroutine
 def get_statuscodes(domain):
     """get main site status code"""
+    if DEBUG:
+        print('get_statuscodes start')
     try:
         html = urllib.request.urlopen('http://{}'.format(domain))
         site = lxml.html.parse(html)
@@ -75,19 +105,25 @@ def get_statuscodes(domain):
         INFORMATION['TITLE'] = ''
         INFORMATION['SPEED'] = ''
         INFORMATION['ERR3'] = 'Unable to get site {}'.format(error)
+    if DEBUG:
+        print('get_statuscodes stop')
 
-@asyncio.coroutine
 def get_ssl(domain):
     """get SSL cert"""
+    if DEBUG:
+        print('get_ssl start')
     try:
         requests.get('https://{}'.format(domain), verify=True)
         INFORMATION['SSL'] = 'Yes'
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
         INFORMATION['SSL'] = 'No'
+    if DEBUG:
+        print('get_ssl stop')
 
-@asyncio.coroutine
 def get_srv(domain):
     """get server information """
+    if DEBUG:
+        print('get_srv start')
     try:
         site = requests.get('http://{}'.format(domain))
         try:
@@ -96,10 +132,13 @@ def get_srv(domain):
             INFORMATION['SRV'] = ''
     except requests.exceptions.RequestException as error:
         INFORMATION['SRV'] = ''
+    if DEBUG:
+        print('get_srv stop')
 
-@asyncio.coroutine
 def get_php(domain):
     """get php version"""
+    if DEBUG:
+        print('get_php start')
     try:
         result = requests.get('http://{}'.format(domain))
         try:
@@ -116,6 +155,8 @@ def get_php(domain):
     except requests.exceptions.RequestException as error:
         php = ''
     INFORMATION['PHP'] = php
+    if DEBUG:
+        print('get_php stop')
 
 
 def main():
@@ -191,10 +232,6 @@ def get_information(domain):
     # prepare domain information dictionary
     information = {}
 
-    # create resolver object
-    res = resolver.Resolver()
-    res.nameservers = [RESOVING_NAMESERVER]
-
     # get only domain name
     INFORMATION['name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
     #INFORMATION['name'] = domain.split("@")[-1] if '@' in domain else domain
@@ -213,64 +250,67 @@ def get_information(domain):
         domain_punycode = ''
     INFORMATION['IDN'] = domain_punycode
 
-    # init ip list for domain
-    ips = []
-
-    loop = asyncio.get_event_loop()
-    # get whois from domain name
-    tasks = get_whois(domain), get_wpadmin(domain), get_statuscodes(domain), page_speed(domain), get_ssl(domain), get_srv(domain), get_php(domain)
     
-    whois, wp_result, statuscodes, speed, ssl, srv, php = loop.run_until_complete(asyncio.gather(*tasks))
-    loop.close()
+
+    # Split work into threads
+    functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip
+    threads_list = list()
+    for function in functions:
+        threads_list.append(Thread(name=function, target=function, args=(domain,)))
+    
+    for thread in threads_list:
+        thread.start()
+
+    for thread in threads_list:
+        thread.join()
 
     # get expiry date
     try:
-        INFORMATION['EXP'] = whois['expiration_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['EXP'] = WHOIS['expiration_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
         INFORMATION['EXP'] = ''
 
     # get modified
     try:
-        INFORMATION['MOD'] = whois['updated_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['MOD'] = WHOIS['updated_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
         INFORMATION['MOD'] = ''
 
     # get status
     try:
-        status = ','.join(whois['status'])
+        status = ','.join(WHOIS['status'])
     except (KeyError, TypeError):
         status = ''
     INFORMATION['STAT'] = status
 
     try:
-        reg = ' '.join(whois['registrar'])
+        reg = ' '.join(WHOIS['registrar'])
     except (KeyError, TypeError):
         reg = ''
     INFORMATION['REG'] = reg
 
     try:
-        ns_ = ' '.join(whois['nameservers'])
+        ns_ = ' '.join(WHOIS['nameservers'])
     except (KeyError, TypeError):
         ns_ = ''
     INFORMATION['DNS'] = ns_
 
-    # get ip from domain
-    try:
-        answers = res.query(domain)
-        for rdata in answers:
-            ips.append(rdata.address)
-        INFORMATION['IP'] = ' / '.join(ips)
 
+    # get ip from domain
+    res = resolver.Resolver()
+    res.nameservers = [RESOVING_NAMESERVER]
+    ips = []
+    try:
         # get host from ip
         try:
-            host = socket.gethostbyaddr(ips[0])[0]
+            host = socket.gethostbyaddr(INFORMATION['IP'])[0]
         except socket.error:
             host = ''
         INFORMATION['HOST'] = host
 
         # get name from ip
         try:
-            whois_2 = pythonwhois.get_whois(ips[0], True)
+            whois_2 = pythonwhois.get_whois(INFORMATION['IP'], True)
         except (UnicodeDecodeError, ValueError) as error:
             whois_2 = False
             INFORMATION['ERR2'] = 'Python whois DecodeError (IP) {}'.format(error)
@@ -359,7 +399,7 @@ def output_console(suggestions):
                 value = 'Yes'
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], value))
         else:
-            print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], UNKNOWN))
+            print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], ''))
     for error_msg in suggestions['error']:
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['red'], error_msg, COLOR['end']))
     for varning_msg in suggestions['varning']:
@@ -367,7 +407,7 @@ def output_console(suggestions):
     for notice_msg in suggestions['notice']:
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
 
-@asyncio.coroutine
+
 def page_speed(domain):
     """get ttfb and ttlb from url"""
     url = 'http://{}'.format(domain)
