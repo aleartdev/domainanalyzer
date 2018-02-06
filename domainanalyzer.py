@@ -23,6 +23,7 @@ from threading import Thread
 # TODO: dont check non domain name first argument, exit with notice
 # TODO: dont fail on non existing domain
 # TODO: threading on all heavy lifting. Get domain IP first before heavy lift. Start all at same time and add more on certiain return?
+# TODO: cloud flare failurllib.error.HTTPError: HTTP Error 403: Forbidden http://104.18.54.15/
 
 # SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
@@ -411,18 +412,21 @@ def output_console(suggestions):
 
 def page_speed(domain):
     """get ttfb and ttlb from url"""
-    url = 'http://{}'.format(domain)
-    opener = urllib.request.build_opener()
-    request = urllib.request.Request(url)
+    try:
+        url = 'http://{}'.format(domain)
+        opener = urllib.request.build_opener()
+        request = urllib.request.Request(url)
 
-    start = int(round(time.time() * 1000))
-    resp = opener.open(request)
-    # read one byte
-    resp.read(1)
-    INFORMATION['TTFB_MS'] = int(round(time.time() * 1000)) - start
-    # read the rest
-    resp.read()
-    INFORMATION['TTLB_MS'] = int(round(time.time() * 1000)) - start
+        start = int(round(time.time() * 1000))
+        resp = opener.open(request)
+        # read one byte
+        resp.read(1)
+        INFORMATION['TTFB_MS'] = int(round(time.time() * 1000)) - start
+        # read the rest
+        resp.read()
+        INFORMATION['TTLB_MS'] = int(round(time.time() * 1000)) - start
+    except urllib.error.HTTPError:
+        pass
 
 if __name__ == "__main__":
     main()
