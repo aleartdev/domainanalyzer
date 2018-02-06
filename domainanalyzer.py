@@ -66,7 +66,6 @@ def get_information(domain):
 
     # get only domain name
     INFORMATION['name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
-    #INFORMATION['name'] = domain.split("@")[-1] if '@' in domain else domain
 
     # use only domain name for rest of the script
     domain = INFORMATION['name']
@@ -82,7 +81,15 @@ def get_information(domain):
         domain_punycode = ''
     INFORMATION['IDN'] = domain_punycode
 
-    
+
+    # 88888888888 888    888 8888888b.  8888888888        d8888 8888888b. 8888888 888b    888  .d8888b.  
+    #     888     888    888 888   Y88b 888              d88888 888  "Y88b  888   8888b   888 d88P  Y88b 
+    #     888     888    888 888    888 888             d88P888 888    888  888   88888b  888 888    888 
+    #     888     8888888888 888   d88P 8888888        d88P 888 888    888  888   888Y88b 888 888        
+    #     888     888    888 8888888P"  888           d88P  888 888    888  888   888 Y88b888 888  88888 
+    #     888     888    888 888 T88b   888          d88P   888 888    888  888   888  Y88888 888    888 
+    #     888     888    888 888  T88b  888         d8888888888 888  .d88P  888   888   Y8888 Y88b  d88P 
+    #     888     888    888 888   T88b 8888888888 d88P     888 8888888P" 8888888 888    Y888  "Y8888P88
 
     # Split work into threads
     functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip
@@ -347,7 +354,10 @@ def get_statuscodes(domain):
     try:
         html = urllib.request.urlopen('http://{}'.format(domain))
         site = lxml.html.parse(html)
-        INFORMATION['TITLE'] = site.find(".//title").text
+        try:
+            INFORMATION['TITLE'] = site.find(".//title").text
+        except AttributeError:
+            INFORMATION['TITLE'] = 'No title tag found'
     except (urllib.error.HTTPError, ConnectionResetError) as error:
         INFORMATION['TITLE'] = ''
         INFORMATION['SPEED'] = ''
