@@ -45,181 +45,14 @@ COLOR = {
 WHOIS = False
 INFORMATION = {}
 
-def get_whois(domain):
-    """get whois from domain name"""
-    global WHOIS
-    if DEBUG:
-        print('get_whois start {}'.format(domain))
-    try:
-        WHOIS = pythonwhois.get_whois(domain, True)
-        if DEBUG:
-            print('get_whois stop (success)')
-    except UnicodeDecodeError:
-        INFORMATION['ERR1'] = 'Python whois UnicodeDecodeError (Domain)'
-        WHOIS = False
-        if DEBUG:
-            print('get_whois stop (with error)')
-
-def get_ip(domain):
-    """get whois from domain name"""
-    if DEBUG:
-        print('get_ip start {}'.format(domain))
-    # create resolver object
-    res = resolver.Resolver()
-    res.nameservers = [RESOVING_NAMESERVER]
-    ips = []
-    try:
-        answers = res.query(domain)
-        for rdata in answers:
-            ips.append(rdata.address)
-        INFORMATION['IP'] = ips[0]
-    except dns.resolver.NXDOMAIN:
-        INFORMATION['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
-    except dns.resolver.Timeout:
-        INFORMATION['ERR'] = 'ERR\tTimeout'
-    except dns.exception.DNSException:
-        INFORMATION['ERR'] = 'ERR\tDNSException'
-    if DEBUG:
-        print('get_ip stop')
-
-def get_wpadmin(domain):
-    """get Wordpress admin login status code"""
-    if DEBUG:
-        print('get_wpadmin start')
-    try:
-        result = requests.get('http://{}/wp-admin'.format(domain))
-        if result.status_code == 200:
-            INFORMATION['WP'] = True
-    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
-        INFORMATION['WP'] = False
-    if DEBUG:
-        print('get_wpadmin stop')
-
-def get_statuscodes(domain):
-    """get main site status code"""
-    if DEBUG:
-        print('get_statuscodes start')
-    try:
-        html = urllib.request.urlopen('http://{}'.format(domain))
-        site = lxml.html.parse(html)
-        INFORMATION['TITLE'] = site.find(".//title").text
-    except (urllib.error.HTTPError, ConnectionResetError) as error:
-        INFORMATION['TITLE'] = ''
-        INFORMATION['SPEED'] = ''
-        INFORMATION['ERR3'] = 'Unable to get site {}'.format(error)
-    if DEBUG:
-        print('get_statuscodes stop')
-
-def get_ssl(domain):
-    """get SSL cert"""
-    if DEBUG:
-        print('get_ssl start')
-    try:
-        requests.get('https://{}'.format(domain), verify=True)
-        INFORMATION['SSL'] = 'Yes'
-    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
-        INFORMATION['SSL'] = 'No'
-    if DEBUG:
-        print('get_ssl stop')
-
-def get_srv(domain):
-    """get server information """
-    if DEBUG:
-        print('get_srv start')
-    try:
-        site = requests.get('http://{}'.format(domain))
-        try:
-            INFORMATION['SRV'] = site.headers['server']
-        except KeyError:
-            INFORMATION['SRV'] = ''
-    except requests.exceptions.RequestException as error:
-        INFORMATION['SRV'] = ''
-    if DEBUG:
-        print('get_srv stop')
-
-def get_php(domain):
-    """get php version"""
-    if DEBUG:
-        print('get_php start')
-    try:
-        result = requests.get('http://{}'.format(domain))
-        try:
-            php = result.headers['X-Powered-By']
-            if 'php' not in php.lower():
-                php = ''
-        except KeyError:
-            php = ''
-        try:
-            size = round(int(result.headers['Content-length'])/1024)
-            INFORMATION['SIZE'] = '{} kB'.format(size)
-        except KeyError:
-            INFORMATION['SIZE'] = ''
-    except requests.exceptions.RequestException as error:
-        php = ''
-    INFORMATION['PHP'] = php
-    if DEBUG:
-        print('get_php stop')
-
-
 def main():
     """Main function"""
+    
     domain = get_argument(1, None)
     problem = get_argument(2, None)
     get_information(domain)
     suggestions = analyze(problem)
     output_console(suggestions)
-
-def analyze(problem):
-    """Get suggestions what can be fixed"""
-    suggestions = {'error':[], 'varning':[], 'notice':[]}
-
-    # TODO: if mx on other ip then varning on ssl problem. 
-
-    # varning status
-    if 'ok' not in INFORMATION['STAT'] and 'transfer' not in INFORMATION['STAT'].lower():
-        suggestions['error'].append('Domain status code not OK!')
-
-    # notice status
-    if 'transfer' in INFORMATION['STAT'].lower():
-        suggestions['notice'].append('Domain transfer status code!')
-    else:
-        if 'ok' not in INFORMATION['STAT'].lower():
-            suggestions['error'].append('Domain status code not OK!')
-
-    # notice ssl
-    if INFORMATION['SSL'] == 'No':
-        if problem == 'ssl':
-            suggestions['error'].append('No SSL detected!')
-        else:
-            suggestions['notice'].append('No SSL detected!')
-
-    # varning spf
-    if 'spf' not in INFORMATION['TXT'].lower():
-        if problem == 'mail':
-            suggestions['error'].append('No SPF record!')
-        else:
-            suggestions['varning'].append('No SPF record!')
-
-
-    # php
-    if '5.' in INFORMATION['PHP']:
-        suggestions['varning'].append('Low PHP version!')
-    if INFORMATION['PHP'] == '':
-        suggestions['notice'].append('PHP version not detected!')
-
-    # varning mx ip dont match
-    if INFORMATION['MX'] and (INFORMATION['IP'] != INFORMATION['MXIP']):
-        if INFORMATION['MXIP'] == '':
-            suggestions['varning'].append('MX host IP lookup failed!')
-        else:
-            # TODO: compare TLD of host of DNS A and DNS MX ant throw notice for diff
-            if 'oderland' in INFORMATION['MXH'].lower() and 'oderland' in INFORMATION['HOST'].lower():
-                pass
-            else:
-                suggestions['notice'].append('Site and mail on different IP!')
-
-    return suggestions
-
 
 def get_argument(index, return_except):
     """get argument at index or returns return_except"""
@@ -230,9 +63,6 @@ def get_argument(index, return_except):
 
 def get_information(domain):
     """get information about the domain"""
-
-    # prepare domain information dictionary
-    information = {}
 
     # get only domain name
     INFORMATION['name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
@@ -393,6 +223,57 @@ def get_information(domain):
     dig_txt_result = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain_dig])
     INFORMATION['TXT'] = dig_txt_result.decode('unicode_escape').strip().replace('\n', '\n\t')
 
+def analyze(problem):
+    """Get suggestions what can be fixed"""
+    suggestions = {'error':[], 'varning':[], 'notice':[]}
+
+    # TODO: if mx on other ip then varning on ssl problem. 
+
+    # varning status
+    if 'ok' not in INFORMATION['STAT'] and 'transfer' not in INFORMATION['STAT'].lower():
+        suggestions['error'].append('Domain status code not OK!')
+
+    # notice status
+    if 'transfer' in INFORMATION['STAT'].lower():
+        suggestions['notice'].append('Domain transfer status code!')
+    else:
+        if 'ok' not in INFORMATION['STAT'].lower():
+            suggestions['error'].append('Domain status code not OK!')
+
+    # notice ssl
+    if INFORMATION['SSL'] == 'No':
+        if problem == 'ssl':
+            suggestions['error'].append('No SSL detected!')
+        else:
+            suggestions['notice'].append('No SSL detected!')
+
+    # varning spf
+    if 'spf' not in INFORMATION['TXT'].lower():
+        if problem == 'mail':
+            suggestions['error'].append('No SPF record!')
+        else:
+            suggestions['varning'].append('No SPF record!')
+
+
+    # php
+    if '5.' in INFORMATION['PHP']:
+        suggestions['varning'].append('Low PHP version!')
+    if INFORMATION['PHP'] == '':
+        suggestions['notice'].append('PHP version not detected!')
+
+    # varning mx ip dont match
+    if INFORMATION['MX'] and (INFORMATION['IP'] != INFORMATION['MXIP']):
+        if INFORMATION['MXIP'] == '':
+            suggestions['varning'].append('MX host IP lookup failed!')
+        else:
+            # TODO: compare TLD of host of DNS A and DNS MX ant throw notice for diff
+            if 'oderland' in INFORMATION['MXH'].lower() and 'oderland' in INFORMATION['HOST'].lower():
+                pass
+            else:
+                suggestions['notice'].append('Site and mail on different IP!')
+
+    return suggestions
+
 def output_console(suggestions):
     """output suggestions to console"""
     for key, value in INFORMATION.items():
@@ -409,6 +290,120 @@ def output_console(suggestions):
     for notice_msg in suggestions['notice']:
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
 
+def get_whois(domain):
+    """get whois from domain name"""
+    global WHOIS
+    if DEBUG:
+        print('get_whois start {}'.format(domain))
+    try:
+        WHOIS = pythonwhois.get_whois(domain, True)
+        if DEBUG:
+            print('get_whois stop (success)')
+    except UnicodeDecodeError:
+        INFORMATION['ERR1'] = 'Python whois UnicodeDecodeError (Domain)'
+        WHOIS = False
+        if DEBUG:
+            print('get_whois stop (with error)')
+
+def get_ip(domain):
+    """get whois from domain name"""
+    if DEBUG:
+        print('get_ip start {}'.format(domain))
+    # create resolver object
+    res = resolver.Resolver()
+    res.nameservers = [RESOVING_NAMESERVER]
+    ips = []
+    try:
+        answers = res.query(domain)
+        for rdata in answers:
+            ips.append(rdata.address)
+        INFORMATION['IP'] = ips[0]
+    except dns.resolver.NXDOMAIN:
+        INFORMATION['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
+    except dns.resolver.Timeout:
+        INFORMATION['ERR'] = 'ERR\tTimeout'
+    except dns.exception.DNSException:
+        INFORMATION['ERR'] = 'ERR\tDNSException'
+    if DEBUG:
+        print('get_ip stop')
+
+def get_wpadmin(domain):
+    """get Wordpress admin login status code"""
+    if DEBUG:
+        print('get_wpadmin start')
+    try:
+        result = requests.get('http://{}/wp-admin'.format(domain))
+        if result.status_code == 200:
+            INFORMATION['WP'] = True
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        INFORMATION['WP'] = False
+    if DEBUG:
+        print('get_wpadmin stop')
+
+def get_statuscodes(domain):
+    """get main site status code"""
+    if DEBUG:
+        print('get_statuscodes start')
+    try:
+        html = urllib.request.urlopen('http://{}'.format(domain))
+        site = lxml.html.parse(html)
+        INFORMATION['TITLE'] = site.find(".//title").text
+    except (urllib.error.HTTPError, ConnectionResetError) as error:
+        INFORMATION['TITLE'] = ''
+        INFORMATION['SPEED'] = ''
+        INFORMATION['ERR3'] = 'Unable to get site {}'.format(error)
+    if DEBUG:
+        print('get_statuscodes stop')
+
+def get_ssl(domain):
+    """get SSL cert"""
+    if DEBUG:
+        print('get_ssl start')
+    try:
+        requests.get('https://{}'.format(domain), verify=True)
+        INFORMATION['SSL'] = 'Yes'
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+        INFORMATION['SSL'] = 'No'
+    if DEBUG:
+        print('get_ssl stop')
+
+def get_srv(domain):
+    """get server information """
+    if DEBUG:
+        print('get_srv start')
+    try:
+        site = requests.get('http://{}'.format(domain))
+        try:
+            INFORMATION['SRV'] = site.headers['server']
+        except KeyError:
+            INFORMATION['SRV'] = ''
+    except requests.exceptions.RequestException:
+        INFORMATION['SRV'] = ''
+    if DEBUG:
+        print('get_srv stop')
+
+def get_php(domain):
+    """get php version"""
+    if DEBUG:
+        print('get_php start')
+    try:
+        result = requests.get('http://{}'.format(domain))
+        try:
+            php = result.headers['X-Powered-By']
+            if 'php' not in php.lower():
+                php = ''
+        except KeyError:
+            php = ''
+        try:
+            size = round(int(result.headers['Content-length'])/1024)
+            INFORMATION['SIZE'] = '{} kB'.format(size)
+        except KeyError:
+            INFORMATION['SIZE'] = ''
+    except requests.exceptions.RequestException:
+        php = ''
+    INFORMATION['PHP'] = php
+    if DEBUG:
+        print('get_php stop')
 
 def page_speed(domain):
     """get ttfb and ttlb from url"""
