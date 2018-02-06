@@ -20,12 +20,13 @@ from threading import Thread
 
 # TODO: stackoverflow.com fix MXH to complete domain name
 # TODO: make the script run in Docker instead
-# TODO: dont check non domain first argument, exit with notice
+# TODO: dont check non domain name first argument, exit with notice
+# TODO: dont fail on non existing domain
 # TODO: threading on all heavy lifting. Get domain IP first before heavy lift. Start all at same time and add more on certiain return?
 
 # SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
-DEBUG = True
+DEBUG = False
 COLOR = {
     'purple': '\033[95m',
     'cyan': '\033[96m',
