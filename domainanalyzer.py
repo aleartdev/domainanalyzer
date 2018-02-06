@@ -237,8 +237,8 @@ def analyze(problem):
     # TODO: if mx on other ip then varning on ssl problem. 
 
     # varning status
-    if 'ok' not in INFORMATION['STAT'] and 'transfer' not in INFORMATION['STAT'].lower():
-        suggestions['error'].append('Domain status code not OK!')
+    #if 'ok' not in INFORMATION['STAT'] and 'transfer' not in INFORMATION['STAT'].lower():
+    #    suggestions['error'].append('Domain status code not OK!')
 
     # notice status
     if 'transfer' in INFORMATION['STAT'].lower():
