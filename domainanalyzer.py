@@ -387,7 +387,7 @@ def get_statuscodes(domain, event_ip):
     except (urllib.error.HTTPError, ConnectionResetError) as error:
         INFORMATION['TITLE'] = ''
         INFORMATION['SPEED'] = ''
-        INFORMATION['ERR3'] = 'xUnable to get site {}'.format(error)
+        INFORMATION['ERR3'] = 'Unable to get site {}'.format(error)
     if DEBUG:
         print('get_statuscodes stop')
 
