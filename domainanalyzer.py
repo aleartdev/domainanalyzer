@@ -13,6 +13,7 @@ import dns
 from dns import resolver
 import lxml.html
 from threading import Thread
+import threading
 from collections import OrderedDict
 
 # This fix needs to be used on net.py in pythonwhois on your local computer
@@ -93,10 +94,11 @@ def get_information(domain):
     #     888     888    888 888   T88b 8888888888 d88P     888 8888888P" 8888888 888    Y888  "Y8888P88
 
     # Split work into threads
-    functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip
+    event_ip = threading.Event()
+    functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip, get_host, get_mxorg
     threads_list = list()
     for function in functions:
-        threads_list.append(Thread(name=function, target=function, args=(domain,)))
+        threads_list.append(Thread(name=function, target=function, args=(domain, event_ip)))
     
     for thread in threads_list:
         thread.start()
@@ -146,35 +148,6 @@ def get_information(domain):
     res = resolver.Resolver()
     res.nameservers = [RESOVING_NAMESERVER]
     ips = []
-    try:
-        # get host from ip
-        try:
-            host = socket.gethostbyaddr(INFORMATION['IP'])[0]
-        except socket.error:
-            host = ''
-        INFORMATION['HOST'] = host
-
-        # get name from ip
-        try:
-            whois_2 = pythonwhois.get_whois(INFORMATION['IP'], True)
-        except (UnicodeDecodeError, ValueError) as error:
-            whois_2 = False
-            INFORMATION['ERR2'] = 'Python whois DecodeError (IP) {}'.format(error)
-        try:
-            org = whois_2['contacts']['registrant']['name']
-        except (KeyError, TypeError):
-            try:
-                org = whois_2['emails'][0]
-            except (KeyError, TypeError):
-                org = ''
-        INFORMATION['ORG'] = org
-
-    except dns.resolver.NXDOMAIN:
-        INFORMATION['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
-    except dns.resolver.Timeout:
-        INFORMATION['ERR'] = 'ERR\tTimeout'
-    except dns.exception.DNSException:
-        INFORMATION['ERR'] = 'ERR\tDNSException'
 
     dig_mx_result = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain])
     mx_ = dig_mx_result.decode('unicode_escape').strip().replace('\n', '\n\t')
@@ -237,15 +210,13 @@ def get_information(domain):
     dig_txt_result = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain_dig])
     INFORMATION['TXT'] = dig_txt_result.decode('unicode_escape').strip().replace('\n', '\n\t')
 
+
+
 def analyze(problem):
     """Get suggestions what can be fixed"""
     suggestions = {'error':[], 'varning':[], 'notice':[]}
 
     # TODO: if mx on other ip then varning on ssl problem. 
-
-    # varning status
-    #if 'ok' not in INFORMATION['STAT'] and 'transfer' not in INFORMATION['STAT'].lower():
-    #    suggestions['error'].append('Domain status code not OK!')
 
     # notice status
     if 'transfer' in INFORMATION['STAT'].lower():
@@ -306,7 +277,52 @@ def output_console(suggestions):
     for notice_msg in suggestions['notice']:
         print('{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
 
-def get_whois(domain):
+def get_host(domain, event_ip):
+    # get host from ip when ip is avalible
+    event_ip.wait()
+    if DEBUG:
+        print('get_host start')
+    global INFORMATION
+    try:
+        host = socket.gethostbyaddr(INFORMATION['IP'])[0]
+    except socket.error:
+        host = ''
+    INFORMATION['HOST'] = host
+    if DEBUG:
+        print('get_host stop')
+
+def get_mxorg(domain, event_ip):
+    # get Org name from mx ip when ip is avalible
+    event_ip.wait()
+    if DEBUG:
+        print('get_mxorg start')
+    global INFORMATION
+    
+    try:
+        try:
+            whois_2 = pythonwhois.get_whois(INFORMATION['IP'], True)
+        except (UnicodeDecodeError, ValueError) as error:
+            whois_2 = False
+            INFORMATION['ERR2'] = 'Python whois DecodeError (IP) {}'.format(error)
+        try:
+            org = whois_2['contacts']['registrant']['name']
+        except (KeyError, TypeError):
+            try:
+                org = whois_2['emails'][0]
+            except (KeyError, TypeError):
+                org = ''
+        INFORMATION['ORG'] = org
+        if DEBUG:
+            print('get_mxorg stop')
+
+    except dns.resolver.NXDOMAIN:
+        INFORMATION['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
+    except dns.resolver.Timeout:
+        INFORMATION['ERR'] = 'ERR\tTimeout'
+    except dns.exception.DNSException:
+        INFORMATION['ERR'] = 'ERR\tDNSException'
+        
+def get_whois(domain, event_ip):
     """get whois from domain name"""
     global WHOIS
     if DEBUG:
@@ -321,7 +337,7 @@ def get_whois(domain):
         if DEBUG:
             print('get_whois stop (with error)')
 
-def get_ip(domain):
+def get_ip(domain, event_ip):
     """get whois from domain name"""
     if DEBUG:
         print('get_ip start {}'.format(domain))
@@ -342,8 +358,9 @@ def get_ip(domain):
         INFORMATION['ERR'] = 'ERR\tDNSException'
     if DEBUG:
         print('get_ip stop')
+    event_ip.set()
 
-def get_wpadmin(domain):
+def get_wpadmin(domain, event_ip):
     """get Wordpress admin login status code"""
     if DEBUG:
         print('get_wpadmin start')
@@ -356,7 +373,7 @@ def get_wpadmin(domain):
     if DEBUG:
         print('get_wpadmin stop')
 
-def get_statuscodes(domain):
+def get_statuscodes(domain, event_ip):
     """get main site status code"""
     if DEBUG:
         print('get_statuscodes start')
@@ -370,11 +387,11 @@ def get_statuscodes(domain):
     except (urllib.error.HTTPError, ConnectionResetError) as error:
         INFORMATION['TITLE'] = ''
         INFORMATION['SPEED'] = ''
-        INFORMATION['ERR3'] = 'Unable to get site {}'.format(error)
+        INFORMATION['ERR3'] = 'xUnable to get site {}'.format(error)
     if DEBUG:
         print('get_statuscodes stop')
 
-def get_ssl(domain):
+def get_ssl(domain, event_ip):
     """get SSL cert"""
     if DEBUG:
         print('get_ssl start')
@@ -386,7 +403,7 @@ def get_ssl(domain):
     if DEBUG:
         print('get_ssl stop')
 
-def get_srv(domain):
+def get_srv(domain, event_ip):
     """get server information """
     if DEBUG:
         print('get_srv start')
@@ -401,7 +418,7 @@ def get_srv(domain):
     if DEBUG:
         print('get_srv stop')
 
-def get_php(domain):
+def get_php(domain, event_ip):
     """get php version"""
     if DEBUG:
         print('get_php start')
@@ -424,7 +441,7 @@ def get_php(domain):
     if DEBUG:
         print('get_php stop')
 
-def page_speed(domain):
+def page_speed(domain, event_ip):
     """get ttfb and ttlb from url"""
     try:
         url = 'http://{}'.format(domain)
