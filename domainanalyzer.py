@@ -29,7 +29,9 @@ from collections import OrderedDict
 
 # SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
-DEBUG = False
+RES = resolver.Resolver()
+RES.nameservers = [RESOVING_NAMESERVER]
+DEBUG = True
 COLOR = {
     'purple': '\033[95m',
     'cyan': '\033[96m',
@@ -63,14 +65,16 @@ def get_argument(index, return_except):
     except IndexError:
         return return_except
 
-def get_information(domain):
+def get_information(search):
     """get information about the domain"""
 
+    INFORMATION['SEARCH'] = search
+
     # get only domain name
-    INFORMATION['NAME'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
+    INFORMATION['DN'] = search.split("//")[-1].split("/")[0] if '//' in search else search
 
     # use only domain name for rest of the script
-    domain = INFORMATION['NAME']
+    domain = INFORMATION['DN']
 
     # get punycode
     try:
@@ -95,7 +99,7 @@ def get_information(domain):
 
     # Split work into threads
     event_ip = threading.Event()
-    functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip, get_host, get_mxorg
+    functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip, get_host, get_mxorg, get_mx
     threads_list = list()
     for function in functions:
         threads_list.append(Thread(name=function, target=function, args=(domain, event_ip)))
@@ -143,40 +147,18 @@ def get_information(domain):
         ns_ = ''
     INFORMATION['DNS'] = ns_
 
-
-    # get ip from domain
-    res = resolver.Resolver()
-    res.nameservers = [RESOVING_NAMESERVER]
-    ips = []
-
-    dig_mx_result = subprocess.check_output(['dig', '+noall', '+answer', 'MX', domain])
-    mx_ = dig_mx_result.decode('unicode_escape').strip().replace('\n', '\n\t')
-    if mx_:
-        INFORMATION['MX'] = mx_
-    else:
-        INFORMATION['MX'] = ''
-
-    # get mx host
     if INFORMATION['MX']:
+        
+        # move to thread waiting for MXH
+        global RES
         try:
-            re_domain = r'([a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9\-]{1,}\.[a-zA-Z0-9]{1,}\.?[a-zA-Z0-9]{0,})'
-            INFORMATION['MXH'] = re.findall(re_domain, INFORMATION['MX'])[0]
-        except IndexError:
-            if 'mx' in INFORMATION['MX'].lower():
-                INFORMATION['MXH'] = INFORMATION['NAME']
-            else:
-                INFORMATION['MXH'] = ''
-        try:
-            ips = []
-            mx_answers = res.query(INFORMATION['MXH'])
-            for rdata in mx_answers:
-                ips.append(rdata.address)
-            INFORMATION['MXIP'] = ips[0]
+            INFORMATION['MXIP'] = RES.query(INFORMATION['MXH'])[0].address
         except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
             INFORMATION['MXIP'] = ''
 
         if INFORMATION['MXIP']:
             # get org name from MXIP
+            # move to thread waiting for MXIP if MXH exists.
             try:
                 whois_3 = pythonwhois.get_whois(INFORMATION['MXIP'], True)
 
@@ -198,19 +180,17 @@ def get_information(domain):
 
     # check host of MXIP
         try:
-            INFORMATION['MXH2'] = socket.gethostbyaddr(INFORMATION['MXIP'])[0]
+            INFORMATION['MXHR'] = socket.gethostbyaddr(INFORMATION['MXIP'])[0]
         except socket.error:
-            INFORMATION['MXH2'] = ''
+            INFORMATION['MXHR'] = ''
     else:
-        INFORMATION['MXH2'] = ''
+        INFORMATION['MXHR'] = ''
         INFORMATION['MXORG'] = ''
 
 
     # dig +noall +answer TXT domain
     dig_txt_result = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain_dig])
     INFORMATION['TXT'] = dig_txt_result.decode('unicode_escape').strip().replace('\n', '\n\t')
-
-
 
 def analyze(problem):
     """Get suggestions what can be fixed"""
@@ -291,6 +271,20 @@ def get_host(domain, event_ip):
     if DEBUG:
         print('get_host stop')
 
+def get_mx(domain, event_ip):
+    # get dns mx pointers for domain
+    if DEBUG:
+        print('get_mx start')
+    global INFORMATION
+    try:
+        INFORMATION['MX'] = '\n\t'.join([mx.to_text() for mx in dns.resolver.query(domain, 'MX')])
+        INFORMATION['MXH'] = re.findall(r'.* (.*).', INFORMATION['MX'])[0]
+    except socket.error:
+        INFORMATION['MX'] = ''
+        INFORMATION['MXH'] = ''
+    if DEBUG:
+        print('get_mx stop')
+
 def get_mxorg(domain, event_ip):
     # get Org name from mx ip when ip is avalible
     event_ip.wait()
@@ -342,11 +336,10 @@ def get_ip(domain, event_ip):
     if DEBUG:
         print('get_ip start {}'.format(domain))
     # create resolver object
-    res = resolver.Resolver()
-    res.nameservers = [RESOVING_NAMESERVER]
+    global RES
     ips = []
     try:
-        answers = res.query(domain)
+        answers = RES.query(domain)
         for rdata in answers:
             ips.append(rdata.address)
         INFORMATION['IP'] = ips[0]
