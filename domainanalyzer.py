@@ -13,6 +13,7 @@ import dns
 from dns import resolver
 import lxml.html
 from threading import Thread
+from collections import OrderedDict
 
 # This fix needs to be used on net.py in pythonwhois on your local computer
 # to correctly handle non standard characters
@@ -65,10 +66,10 @@ def get_information(domain):
     """get information about the domain"""
 
     # get only domain name
-    INFORMATION['name'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
+    INFORMATION['NAME'] = domain.split("//")[-1].split("/")[0] if '//' in domain else domain
 
     # use only domain name for rest of the script
-    domain = INFORMATION['name']
+    domain = INFORMATION['NAME']
 
     # get punycode
     try:
@@ -189,7 +190,7 @@ def get_information(domain):
             INFORMATION['MXH'] = re.findall(re_domain, INFORMATION['MX'])[0]
         except IndexError:
             if 'mx' in INFORMATION['MX'].lower():
-                INFORMATION['MXH'] = INFORMATION['name']
+                INFORMATION['MXH'] = INFORMATION['NAME']
             else:
                 INFORMATION['MXH'] = ''
         try:
@@ -289,6 +290,8 @@ def analyze(problem):
 
 def output_console(suggestions):
     """output suggestions to console"""
+    global INFORMATION
+    INFORMATION = OrderedDict(sorted(INFORMATION.items()))
     for key, value in INFORMATION.items():
         if value:
             if value is True:
