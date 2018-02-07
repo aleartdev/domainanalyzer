@@ -108,6 +108,12 @@ def get_information(domain):
         INFORMATION['EXP'] = WHOIS['expiration_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
         INFORMATION['EXP'] = ''
+    
+    # get expiry date
+    try:
+        INFORMATION['CRE'] = WHOIS['creation_date'][0].strftime("%Y-%m-%d")
+    except (KeyError, TypeError):
+        INFORMATION['CRE'] = ''
 
     # get modified
     try:
