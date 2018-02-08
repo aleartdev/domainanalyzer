@@ -20,11 +20,9 @@ from collections import OrderedDict
 # to correctly handle non standard characters
 # https://github.com/joepie91/python-whois/pull/59
 
-# TODO: stackoverflow.com fix MXH to complete domain name
 # TODO: make the script run in Docker instead
 # TODO: dont check non domain name first argument, exit with notice
 # TODO: dont fail on non existing domain
-# TODO: threading on all heavy lifting. Get domain IP first before heavy lift. Start all at same time and add more on certiain return?
 # TODO: cloud flare failurllib.error.HTTPError: HTTP Error 403: Forbidden http://104.18.54.15/
 
 # SETTINGS
@@ -79,27 +77,15 @@ def get_information(search):
     # get punycode
     try:
         domain.encode(encoding='utf-8').decode('ascii')
-        domain_dig = domain
     except UnicodeDecodeError:
         domain_punycode = domain.encode("idna").decode("utf-8")
-        domain_dig = domain_punycode
     else:
         domain_punycode = ''
     INFORMATION['IDN'] = domain_punycode
 
-
-    # 88888888888 888    888 8888888b.  8888888888        d8888 8888888b. 8888888 888b    888  .d8888b.  
-    #     888     888    888 888   Y88b 888              d88888 888  "Y88b  888   8888b   888 d88P  Y88b 
-    #     888     888    888 888    888 888             d88P888 888    888  888   88888b  888 888    888 
-    #     888     8888888888 888   d88P 8888888        d88P 888 888    888  888   888Y88b 888 888        
-    #     888     888    888 8888888P"  888           d88P  888 888    888  888   888 Y88b888 888  88888 
-    #     888     888    888 888 T88b   888          d88P   888 888    888  888   888  Y88888 888    888 
-    #     888     888    888 888  T88b  888         d8888888888 888  .d88P  888   888   Y8888 Y88b  d88P 
-    #     888     888    888 888   T88b 8888888888 d88P     888 8888888P" 8888888 888    Y888  "Y8888P88
-
     # Split work into threads
     event_ip = threading.Event()
-    functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip, get_host, get_mxorg, get_mx
+    functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip, get_host, get_mxorg, get_mx, get_txt
     threads_list = list()
     for function in functions:
         threads_list.append(Thread(name=function, target=function, args=(domain, event_ip)))
@@ -109,88 +95,6 @@ def get_information(search):
 
     for thread in threads_list:
         thread.join()
-
-    # get expiry date
-    try:
-        INFORMATION['EXP'] = WHOIS['expiration_date'][0].strftime("%Y-%m-%d")
-    except (KeyError, TypeError):
-        INFORMATION['EXP'] = ''
-    
-    # get expiry date
-    try:
-        INFORMATION['CRE'] = WHOIS['creation_date'][0].strftime("%Y-%m-%d")
-    except (KeyError, TypeError):
-        INFORMATION['CRE'] = ''
-
-    # get modified
-    try:
-        INFORMATION['MOD'] = WHOIS['updated_date'][0].strftime("%Y-%m-%d")
-    except (KeyError, TypeError):
-        INFORMATION['MOD'] = ''
-
-    # get status
-    try:
-        status = ','.join(WHOIS['status'])
-    except (KeyError, TypeError):
-        status = ''
-    INFORMATION['STAT'] = status
-
-    try:
-        reg = ' '.join(WHOIS['registrar'])
-    except (KeyError, TypeError):
-        reg = ''
-    INFORMATION['REG'] = reg
-
-    try:
-        ns_ = ' '.join(WHOIS['nameservers'])
-    except (KeyError, TypeError):
-        ns_ = ''
-    INFORMATION['DNS'] = ns_
-
-    if INFORMATION['MX']:
-        
-        # move to thread waiting for MXH
-        global RES
-        try:
-            INFORMATION['MXIP'] = RES.query(INFORMATION['MXH'])[0].address
-        except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
-            INFORMATION['MXIP'] = ''
-
-        if INFORMATION['MXIP']:
-            # get org name from MXIP
-            # move to thread waiting for MXIP if MXH exists.
-            try:
-                whois_3 = pythonwhois.get_whois(INFORMATION['MXIP'], True)
-
-            except (UnicodeDecodeError, ValueError) as error:
-                whois_3 = False
-                INFORMATION['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(error)
-            try:
-                mxorg = whois_3['contacts']['registrant']['name']
-            except (KeyError, TypeError):
-                try:
-                    mxorg = whois_3['emails'][0]
-                except (KeyError, TypeError):
-                    mxorg = ''
-            INFORMATION['MXORG'] = mxorg
-        else:
-            INFORMATION['MXORG'] = ''
-
-
-
-    # check host of MXIP
-        try:
-            INFORMATION['MXHR'] = socket.gethostbyaddr(INFORMATION['MXIP'])[0]
-        except socket.error:
-            INFORMATION['MXHR'] = ''
-    else:
-        INFORMATION['MXHR'] = ''
-        INFORMATION['MXORG'] = ''
-
-
-    # dig +noall +answer TXT domain
-    dig_txt_result = subprocess.check_output(['dig', '+noall', '+answer', 'TXT', domain_dig])
-    INFORMATION['TXT'] = dig_txt_result.decode('unicode_escape').strip().replace('\n', '\n\t')
 
 def analyze(problem):
     """Get suggestions what can be fixed"""
@@ -271,6 +175,24 @@ def get_host(domain, event_ip):
     if DEBUG:
         print('get_host stop')
 
+def get_txt(domain, event_ip):
+    # get dns mx pointers for domain
+    if DEBUG:
+        print('get_txt start')
+    global INFORMATION
+    try:
+        #INFORMATION['TXT'] = dig_txt_result.decode('unicode_escape').strip().replace('\n', '\n\t')
+        # get txt from resolver for domain then make list and concat to string with newline
+        if INFORMATION['IDN']:
+            domain_dig = INFORMATION['IDN']
+        else:
+            domain_dig = domain
+        INFORMATION['TXT'] = '\n\t'.join([txt.to_text() for txt in dns.resolver.query(domain_dig, 'TXT')])
+    except socket.error:
+        INFORMATION['TXT'] = ''
+    if DEBUG:
+        print('get_txt stop')
+
 def get_mx(domain, event_ip):
     # get dns mx pointers for domain
     if DEBUG:
@@ -286,7 +208,42 @@ def get_mx(domain, event_ip):
         INFORMATION['MXH'] = ''
     if DEBUG:
         print('get_mx stop')
+    global RES
+    if INFORMATION['MXH']:
+        try:
+            INFORMATION['MXIP'] = RES.query(INFORMATION['MXH'])[0].address
+        except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
+            INFORMATION['MXIP'] = ''
+    else:
+        INFORMATION['MXIP'] = '' 
+    
+    if INFORMATION['MXIP']:
+        # get org name from MXIP
+        # move to thread waiting for MXIP if MXH exists.
+        try:
+            whois_3 = pythonwhois.get_whois(INFORMATION['MXIP'], True)
 
+        except (UnicodeDecodeError, ValueError) as error:
+            whois_3 = False
+            INFORMATION['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(error)
+        
+        try:
+            mxorg = whois_3['contacts']['registrant']['name']
+        except (KeyError, TypeError):
+            try:
+                mxorg = whois_3['emails'][0]
+            except (KeyError, TypeError):
+                mxorg = ''
+        INFORMATION['MXORG'] = mxorg
+        try:
+            INFORMATION['MXHR'] = socket.gethostbyaddr(INFORMATION['MXIP'])[0]
+        except socket.error:
+            INFORMATION['MXHR'] = ''
+    else:
+        INFORMATION['MXORG'] = ''
+        INFORMATION['MXHR'] = ''
+        INFORMATION['MXORG'] = ''
+        
 def get_mxorg(domain, event_ip):
     # get Org name from mx ip when ip is avalible
     event_ip.wait()
@@ -320,7 +277,7 @@ def get_mxorg(domain, event_ip):
         
 def get_whois(domain, event_ip):
     """get whois from domain name"""
-    global WHOIS
+    global INFORMATION
     if DEBUG:
         print('get_whois start {}'.format(domain))
     try:
@@ -332,6 +289,43 @@ def get_whois(domain, event_ip):
         WHOIS = False
         if DEBUG:
             print('get_whois stop (with error)')
+    
+    # get expiry date
+    try:
+        INFORMATION['EXP'] = WHOIS['expiration_date'][0].strftime("%Y-%m-%d")
+    except (KeyError, TypeError):
+        INFORMATION['EXP'] = ''
+    
+    # get expiry date
+    try:
+        INFORMATION['CRE'] = WHOIS['creation_date'][0].strftime("%Y-%m-%d")
+    except (KeyError, TypeError):
+        INFORMATION['CRE'] = ''
+
+    # get modified
+    try:
+        INFORMATION['MOD'] = WHOIS['updated_date'][0].strftime("%Y-%m-%d")
+    except (KeyError, TypeError):
+        INFORMATION['MOD'] = ''
+
+    # get status
+    try:
+        status = ','.join(WHOIS['status'])
+    except (KeyError, TypeError):
+        status = ''
+    INFORMATION['STAT'] = status
+
+    try:
+        reg = ' '.join(WHOIS['registrar'])
+    except (KeyError, TypeError):
+        reg = ''
+    INFORMATION['REG'] = reg
+
+    try:
+        ns_ = ' '.join(WHOIS['nameservers'])
+    except (KeyError, TypeError):
+        ns_ = ''
+    INFORMATION['DNS'] = ns_
 
 def get_ip(domain, event_ip):
     """get whois from domain name"""
