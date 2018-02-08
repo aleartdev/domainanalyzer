@@ -31,7 +31,7 @@ from collections import OrderedDict
 RESOVING_NAMESERVER = '8.8.8.8'
 RES = resolver.Resolver()
 RES.nameservers = [RESOVING_NAMESERVER]
-DEBUG = True
+DEBUG = False
 COLOR = {
     'purple': '\033[95m',
     'cyan': '\033[96m',
@@ -277,7 +277,9 @@ def get_mx(domain, event_ip):
         print('get_mx start')
     global INFORMATION
     try:
+        # get mx from resolver for domain then make list and concat to string with newline
         INFORMATION['MX'] = '\n\t'.join([mx.to_text() for mx in dns.resolver.query(domain, 'MX')])
+        # get second word that ends with a dot excluding that dot
         INFORMATION['MXH'] = re.findall(r'.* (.*).', INFORMATION['MX'])[0]
     except socket.error:
         INFORMATION['MX'] = ''
