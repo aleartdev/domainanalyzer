@@ -20,11 +20,12 @@ from collections import OrderedDict
 # to correctly handle non standard characters
 # https://github.com/joepie91/python-whois/pull/59
 
-# TODO: make the script run in Docker instead
-# TODO: dont check non domain name first argument, exit with notice
-# TODO: dont fail on non existing domain
-# TODO: cloud flare failurllib.error.HTTPError: HTTP Error 403: Forbidden http://104.18.54.15/
-# TODO: Analyze: slow load time notice. Slow load time and low php warning. <48 hour DNS change warning.
+# TODO make the script run in Docker instead
+# TODO dont check non domain name first argument, exit with notice
+# TODO dont fail on non existing domain
+# TODO <48 hour DNS change warning.
+# TODO Unit test
+# TODO Static type checking mypy
 
 # SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
