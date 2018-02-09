@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding=utf-8
-"""Analyzes given domainnamne and pressents important information"""
+"""Get information and discover problems with a domain name"""
 import sys
 import socket
 import subprocess
@@ -24,13 +24,13 @@ from collections import OrderedDict
 # TODO: dont check non domain name first argument, exit with notice
 # TODO: dont fail on non existing domain
 # TODO: cloud flare failurllib.error.HTTPError: HTTP Error 403: Forbidden http://104.18.54.15/
-# TODO: Analyze: slow load time notice. Slow load time and low php varning. <48 hour DNS change varning.
+# TODO: Analyze: slow load time notice. Slow load time and low php warning. <48 hour DNS change warning.
 
 # SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
 RES = resolver.Resolver()
 RES.nameservers = [RESOVING_NAMESERVER]
-DEBUG = False
+DEBUG = True
 COLOR = {
     'purple': '\033[95m',
     'cyan': '\033[96m',
@@ -49,8 +49,7 @@ WHOIS = False
 INFORMATION = {}
 
 def main():
-    """Main function"""
-    
+    """Main"""
     domain = get_argument(1, None)
     problem = get_argument(2, None)
     get_information(domain)
@@ -58,14 +57,14 @@ def main():
     output_console(suggestions)
 
 def get_argument(index, return_except):
-    """get argument at index or returns return_except"""
+    """get arguments"""
     try:
         return sys.argv[index]
     except IndexError:
         return return_except
 
 def get_information(search):
-    """get information about the domain"""
+    """get domain information"""
 
     INFORMATION['SEARCH'] = search
 
@@ -98,52 +97,52 @@ def get_information(search):
         thread.join()
 
 def analyze(problem):
-    """Get suggestions what can be fixed"""
-    suggestions = {'error':[], 'varning':[], 'notice':[]}
+    """Analyze problems with domain"""
+    suggestions = {'error':[], 'warning':[], 'notice':[]}
 
     # notice slow site
     if INFORMATION['TTLB_MS']:
         if INFORMATION['TTLB_MS']>1000:
             if '5.' in INFORMATION['PHP']:
-                suggestions['varning'].append('Slow site (Low PHP version detected)')
+                suggestions['warning'].append('Slow site (Low PHP version detected)')
             elif INFORMATION['PHP']:
                 suggestions['notice'].append('Slow site (Not PHP version related)')
             else:
                 suggestions['notice'].append('Slow site (PHP version not detected)')
 
-    # varning no host 
+    # warning no host 
     if not INFORMATION['HOST'] and INFORMATION['IP']:
-        suggestions['varning'].append('No host name for A-pointer, possible on VPS or dedicated IP!')
+        suggestions['warning'].append('No host name for A-pointer, possible on VPS or dedicated IP!')
 
-    # error no host 
+    # no ip 
     if not INFORMATION['IP']:
         suggestions['error'].append('No IP (No A-pointer)')
 
-    # notice status
+    # status
     if 'transfer' in INFORMATION['STAT'].lower():
-        suggestions['notice'].append('Domain transfer status code!')
+        suggestions['notice'].append('Status code include "TRANSFER"')
     else:
         if 'ok' not in INFORMATION['STAT'].lower():
-            suggestions['error'].append('Domain status code not OK!')
+            suggestions['error'].append('Status code not "OK"')
 
-    # notice ssl
+    # ssl
     if INFORMATION['SSL'] == 'No':
         if problem == 'ssl':
             suggestions['error'].append('No SSL detected!')
         else:
             suggestions['notice'].append('No SSL detected!')
 
-    # varning spf
+    # spf
     if 'spf' not in INFORMATION['TXT'].lower():
         if problem == 'mail':
             suggestions['error'].append('No SPF record!')
         else:
-            suggestions['varning'].append('No SPF record!')
+            suggestions['warning'].append('No SPF record!')
 
-    # varning mx ip dont match
+    # warning mx ip dont match
     if INFORMATION['MX'] and (INFORMATION['IP'] != INFORMATION['MXIP']):
         if INFORMATION['MXIP'] == '':
-            suggestions['varning'].append('MX host IP lookup failed!')
+            suggestions['warning'].append('MX host IP lookup failed!')
         else:
             # TODO: compare TLD of host of DNS A and DNS MX ant throw notice for diff
             if 'oderland' in INFORMATION['MXH'].lower() and 'oderland' in INFORMATION['HOST'].lower():
@@ -165,11 +164,11 @@ def output_console(suggestions):
         else:
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], ''))
     for error_msg in suggestions['error']:
-        print('🚨{}{}{}{}'.format(COLOR['bold'], COLOR['red'], error_msg, COLOR['end']))
-    for varning_msg in suggestions['varning']:
-        print('⚠️{}{}{}{}'.format(COLOR['bold'], COLOR['yellow'], varning_msg, COLOR['end']))
+        print('Error! {}{}{}{}'.format(COLOR['bold'], COLOR['red'], error_msg, COLOR['end']))
+    for warning_msg in suggestions['warning']:
+        print('Warning! {}{}{}{}'.format(COLOR['bold'], COLOR['yellow'], warning_msg, COLOR['end']))
     for notice_msg in suggestions['notice']:
-        print('❓{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
+        print('Notice! {}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
 
 def get_host(domain, event_ip):
     # get host from ip when ip is avalible
@@ -235,8 +234,6 @@ def get_mx(domain, event_ip):
 
         except (UnicodeDecodeError, ValueError) as error:
             whois_3 = False
-            INFORMATION['ERR3'] = 'Python whois DecodeError (MXIP) {}'.format(error)
-        
         try:
             mxorg = whois_3['contacts']['registrant']['name']
         except (KeyError, TypeError):
@@ -264,9 +261,9 @@ def get_mxorg(domain, event_ip):
     try:
         try:
             whois_2 = pythonwhois.get_whois(INFORMATION['IP'], True)
-        except (UnicodeDecodeError, ValueError) as error:
+        except (UnicodeDecodeError, ValueError, pythonwhois.shared.WhoisException):
             whois_2 = False
-            INFORMATION['ERR2'] = 'Python whois DecodeError (IP) {}'.format(error)
+        
         try:
             org = whois_2['contacts']['registrant']['name']
         except (KeyError, TypeError):
@@ -274,16 +271,12 @@ def get_mxorg(domain, event_ip):
                 org = whois_2['emails'][0]
             except (KeyError, TypeError):
                 org = ''
-        INFORMATION['ORG'] = org
+        INFORMATION['MXORG'] = org
         if DEBUG:
             print('get_mxorg stop')
 
-    except dns.resolver.NXDOMAIN:
-        INFORMATION['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
-    except dns.resolver.Timeout:
-        INFORMATION['ERR'] = 'ERR\tTimeout'
-    except dns.exception.DNSException:
-        INFORMATION['ERR'] = 'ERR\tDNSException'
+    except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
+        INFORMATION['MXORG'] = ''
         
 def get_whois(domain, event_ip):
     """get whois from domain name"""
@@ -332,9 +325,9 @@ def get_whois(domain, event_ip):
         reg = ''
     INFORMATION['REG'] = reg
 
-    # TODO get tech contact from raw if not in parse. m00ndark.com
+    # TODO get tech contact from raw if not in parse. 
     # get tech contact
-    # print(WHOIS['raw'])
+    print(WHOIS['raw'])
 
 
     try:
@@ -355,12 +348,8 @@ def get_ip(domain, event_ip):
         for rdata in answers:
             ips.append(rdata.address)
         INFORMATION['IP'] = ips[0]
-    except dns.resolver.NXDOMAIN:
-        INFORMATION['ERR'] = 'ERR\tNo such domain (NXDOMAIN)'
-    except dns.resolver.Timeout:
-        INFORMATION['ERR'] = 'ERR\tTimeout'
-    except dns.exception.DNSException:
-        INFORMATION['ERR'] = 'ERR\tDNSException'
+    except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
+        INFORMATION['IP'] = ''
     if DEBUG:
         print('get_ip stop')
     event_ip.set()
@@ -390,7 +379,7 @@ def get_statuscodes(domain, event_ip):
         except (AttributeError, AssertionError):
             INFORMATION['TITLE'] = ''
 
-    except (urllib.error.HTTPError, ConnectionResetError) as error:
+    except (urllib.error.HTTPError, ConnectionResetError, urllib.error.URLError) as error:
         INFORMATION['TITLE'] = ''
         INFORMATION['SPEED'] = ''
         INFORMATION['ERR3'] = 'Unable to get site {}'.format(error)
@@ -462,7 +451,7 @@ def page_speed(domain, event_ip):
         # read the rest
         resp.read()
         INFORMATION['TTLB_MS'] = int(round(time.time() * 1000)) - start
-    except urllib.error.HTTPError:
+    except (urllib.error.HTTPError, urllib.error.URLError):
         INFORMATION['TTFB_MS'] = ''
         INFORMATION['TTLB_MS'] = ''
 
