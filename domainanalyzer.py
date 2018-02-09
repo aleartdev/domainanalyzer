@@ -24,6 +24,7 @@ from collections import OrderedDict
 # TODO: dont check non domain name first argument, exit with notice
 # TODO: dont fail on non existing domain
 # TODO: cloud flare failurllib.error.HTTPError: HTTP Error 403: Forbidden http://104.18.54.15/
+# TODO: Analyze: slow load time notice. Slow load time and low php varning. <48 hour DNS change varning.
 
 # SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
@@ -100,7 +101,23 @@ def analyze(problem):
     """Get suggestions what can be fixed"""
     suggestions = {'error':[], 'varning':[], 'notice':[]}
 
-    # TODO: if mx on other ip then varning on ssl problem. 
+    # notice slow site
+    if INFORMATION['TTLB_MS']:
+        if INFORMATION['TTLB_MS']>1000:
+            if '5.' in INFORMATION['PHP']:
+                suggestions['varning'].append('Slow site (Low PHP version detected)')
+            elif INFORMATION['PHP']:
+                suggestions['notice'].append('Slow site (Not PHP version related)')
+            else:
+                suggestions['notice'].append('Slow site (PHP version not detected)')
+
+    # varning no host 
+    if not INFORMATION['HOST'] and INFORMATION['IP']:
+        suggestions['varning'].append('No host name for A-pointer, possible on VPS or dedicated IP!')
+
+    # error no host 
+    if not INFORMATION['IP']:
+        suggestions['error'].append('No IP (No A-pointer)')
 
     # notice status
     if 'transfer' in INFORMATION['STAT'].lower():
@@ -122,13 +139,6 @@ def analyze(problem):
             suggestions['error'].append('No SPF record!')
         else:
             suggestions['varning'].append('No SPF record!')
-
-
-    # php
-    if '5.' in INFORMATION['PHP']:
-        suggestions['varning'].append('Low PHP version!')
-    if INFORMATION['PHP'] == '':
-        suggestions['notice'].append('PHP version not detected!')
 
     # varning mx ip dont match
     if INFORMATION['MX'] and (INFORMATION['IP'] != INFORMATION['MXIP']):
@@ -155,11 +165,11 @@ def output_console(suggestions):
         else:
             print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], ''))
     for error_msg in suggestions['error']:
-        print('{}{}{}{}'.format(COLOR['bold'], COLOR['red'], error_msg, COLOR['end']))
+        print('🚨{}{}{}{}'.format(COLOR['bold'], COLOR['red'], error_msg, COLOR['end']))
     for varning_msg in suggestions['varning']:
-        print('{}{}{}{}'.format(COLOR['bold'], COLOR['yellow'], varning_msg, COLOR['end']))
+        print('⚠️{}{}{}{}'.format(COLOR['bold'], COLOR['yellow'], varning_msg, COLOR['end']))
     for notice_msg in suggestions['notice']:
-        print('{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
+        print('❓{}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'], notice_msg, COLOR['end']))
 
 def get_host(domain, event_ip):
     # get host from ip when ip is avalible
@@ -188,7 +198,7 @@ def get_txt(domain, event_ip):
         else:
             domain_dig = domain
         INFORMATION['TXT'] = '\n\t'.join([txt.to_text() for txt in dns.resolver.query(domain_dig, 'TXT')])
-    except socket.error:
+    except (socket.error, dns.resolver.NoAnswer):
         INFORMATION['TXT'] = ''
     if DEBUG:
         print('get_txt stop')
@@ -203,7 +213,7 @@ def get_mx(domain, event_ip):
         INFORMATION['MX'] = '\n\t'.join([mx.to_text() for mx in dns.resolver.query(domain, 'MX')])
         # get second word that ends with a dot excluding that dot
         INFORMATION['MXH'] = re.findall(r'.* (.*).', INFORMATION['MX'])[0]
-    except socket.error:
+    except (socket.error, dns.resolver.NoAnswer):
         INFORMATION['MX'] = ''
         INFORMATION['MXH'] = ''
     if DEBUG:
@@ -315,11 +325,17 @@ def get_whois(domain, event_ip):
         status = ''
     INFORMATION['STAT'] = status
 
+    # get registrar
     try:
         reg = ' '.join(WHOIS['registrar'])
     except (KeyError, TypeError):
         reg = ''
     INFORMATION['REG'] = reg
+
+    # TODO get tech contact from raw if not in parse. m00ndark.com
+    # get tech contact
+    # print(WHOIS['raw'])
+
 
     try:
         ns_ = ' '.join(WHOIS['nameservers'])
@@ -371,8 +387,9 @@ def get_statuscodes(domain, event_ip):
         site = lxml.html.parse(html)
         try:
             INFORMATION['TITLE'] = site.find(".//title").text
-        except AttributeError:
-            INFORMATION['TITLE'] = 'No title tag found'
+        except (AttributeError, AssertionError):
+            INFORMATION['TITLE'] = ''
+
     except (urllib.error.HTTPError, ConnectionResetError) as error:
         INFORMATION['TITLE'] = ''
         INFORMATION['SPEED'] = ''
@@ -446,7 +463,8 @@ def page_speed(domain, event_ip):
         resp.read()
         INFORMATION['TTLB_MS'] = int(round(time.time() * 1000)) - start
     except urllib.error.HTTPError:
-        pass
+        INFORMATION['TTFB_MS'] = ''
+        INFORMATION['TTLB_MS'] = ''
 
 if __name__ == "__main__":
     main()
