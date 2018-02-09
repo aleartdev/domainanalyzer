@@ -30,7 +30,7 @@ from collections import OrderedDict
 RESOVING_NAMESERVER = '8.8.8.8'
 RES = resolver.Resolver()
 RES.nameservers = [RESOVING_NAMESERVER]
-DEBUG = True
+DEBUG = False
 COLOR = {
     'purple': '\033[95m',
     'cyan': '\033[96m',
@@ -110,6 +110,9 @@ def analyze(problem):
             else:
                 suggestions['notice'].append('Slow site (PHP version not detected)')
 
+    if 'cloudflare' in INFORMATION['SRV']:
+        suggestions['notice'].append('Cloudflare!')
+
     # warning no host 
     if not INFORMATION['HOST'] and INFORMATION['IP']:
         suggestions['warning'].append('No host name for A-pointer, possible on VPS or dedicated IP!')
@@ -139,16 +142,9 @@ def analyze(problem):
         else:
             suggestions['warning'].append('No SPF record!')
 
-    # warning mx ip dont match
-    if INFORMATION['MX'] and (INFORMATION['IP'] != INFORMATION['MXIP']):
-        if INFORMATION['MXIP'] == '':
-            suggestions['warning'].append('MX host IP lookup failed!')
-        else:
-            # TODO: compare TLD of host of DNS A and DNS MX ant throw notice for diff
-            if 'oderland' in INFORMATION['MXH'].lower() and 'oderland' in INFORMATION['HOST'].lower():
-                pass
-            else:
-                suggestions['notice'].append('Site and mail on different IP!')
+
+    if INFORMATION['HOSTDN'] != INFORMATION['MXHDN']:
+        suggestions['notice'].append('Site and mail hosts on different domains!')
 
     return suggestions
 
@@ -177,10 +173,10 @@ def get_host(domain, event_ip):
         print('get_host start')
     global INFORMATION
     try:
-        host = socket.gethostbyaddr(INFORMATION['IP'])[0]
+        INFORMATION['HOST'] = socket.gethostbyaddr(INFORMATION['IP'])[0]
+        INFORMATION['HOSTDN'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFORMATION['HOST'])[0] 
     except socket.error:
-        host = ''
-    INFORMATION['HOST'] = host
+        INFORMATION['HOST'] = ''
     if DEBUG:
         print('get_host stop')
 
@@ -212,9 +208,11 @@ def get_mx(domain, event_ip):
         INFORMATION['MX'] = '\n\t'.join([mx.to_text() for mx in dns.resolver.query(domain, 'MX')])
         # get second word that ends with a dot excluding that dot
         INFORMATION['MXH'] = re.findall(r'.* (.*).', INFORMATION['MX'])[0]
+        INFORMATION['MXHDN'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFORMATION['MXH'])[0] 
     except (socket.error, dns.resolver.NoAnswer):
         INFORMATION['MX'] = ''
         INFORMATION['MXH'] = ''
+        INFORMATION['MXHDN'] = ''
     if DEBUG:
         print('get_mx stop')
     global RES
@@ -325,16 +323,13 @@ def get_whois(domain, event_ip):
         reg = ''
     INFORMATION['REG'] = reg
 
-    # TODO get tech contact from raw if not in parse. 
-    # get tech contact
-    print(WHOIS['raw'])
-
-
     try:
         ns_ = ' '.join(WHOIS['nameservers'])
     except (KeyError, TypeError):
         ns_ = ''
     INFORMATION['DNS'] = ns_
+
+    # Would like Tech contact and such but pwhois seems to get much less thatn whois
 
 def get_ip(domain, event_ip):
     """get whois from domain name"""
