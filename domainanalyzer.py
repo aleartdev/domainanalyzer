@@ -16,16 +16,20 @@ from threading import Thread
 import threading
 from collections import OrderedDict
 
-# This fix needs to be used on net.py in pythonwhois on your local computer
-# to correctly handle non standard characters
+# If you want pwhois to handle non standard characters in result
+# you need to implement this fix on net.py in pythonwhois on your local computer
 # https://github.com/joepie91/python-whois/pull/59
 
 # TODO make the script run in Docker instead
 # TODO dont check non domain name first argument, exit with notice
 # TODO dont fail on non existing domain
-# TODO <48 hour DNS change warning.
+# TODO warning: <48 hour DNS change
+# TODO Get MAIL (other, local, gsuite, outlook)
+# TODO Notice: MAIL on other than local with description
 # TODO Unit test
 # TODO Static type checking mypy
+# TODO Warning: MXHDN not in SPF
+# TODO Notice: IP not in SPF (Warning: if MAIL=local)
 
 # SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
@@ -46,7 +50,6 @@ COLOR = {
 }
 
 # GLOBALS to write to from threads
-WHOIS = False
 INFORMATION = {}
 
 def main():
@@ -86,7 +89,7 @@ def get_information(search):
 
     # Split work into threads
     event_ip = threading.Event()
-    functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip, get_host, get_mxorg, get_mx, get_txt
+    functions = get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl, get_srv, get_php, get_ip, get_host, get_mx, get_txt
     threads_list = list()
     for function in functions:
         threads_list.append(Thread(name=function, target=function, args=(domain, event_ip)))
@@ -116,7 +119,7 @@ def analyze(problem):
 
     # warning no host 
     if not INFORMATION['HOST'] and INFORMATION['IP']:
-        suggestions['warning'].append('No host name for A-pointer, possible on VPS or dedicated IP!')
+        suggestions['notice'].append('No host name for A-pointer, possible on VPS or dedicated IP!')
 
     # no ip 
     if not INFORMATION['IP']:
@@ -143,9 +146,9 @@ def analyze(problem):
         else:
             suggestions['warning'].append('No SPF record!')
 
-
+    # mail
     if INFORMATION['HOSTDN'] != INFORMATION['MXHDN']:
-        suggestions['notice'].append('Site and mail hosts on different domains!')
+        suggestions['notice'].append('External mail hosted at {}!'.format(INFORMATION['MXHDN']))
 
     return suggestions
 
@@ -178,6 +181,8 @@ def get_host(domain, event_ip):
         INFORMATION['HOSTDN'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFORMATION['HOST'])[0] 
     except socket.error:
         INFORMATION['HOST'] = ''
+        INFORMATION['HOSTDN'] = ''
+        
     if DEBUG:
         print('get_host stop')
 
@@ -187,8 +192,6 @@ def get_txt(domain, event_ip):
         print('get_txt start')
     global INFORMATION
     try:
-        #INFORMATION['TXT'] = dig_txt_result.decode('unicode_escape').strip().replace('\n', '\n\t')
-        # get txt from resolver for domain then make list and concat to string with newline
         if INFORMATION['IDN']:
             domain_dig = INFORMATION['IDN']
         else:
@@ -227,20 +230,12 @@ def get_mx(domain, event_ip):
     
     if INFORMATION['MXIP']:
         # get org name from MXIP
-        # move to thread waiting for MXIP if MXH exists.
         try:
-            whois_3 = pythonwhois.get_whois(INFORMATION['MXIP'], True)
+            _whois = pythonwhois.get_whois(INFORMATION['MXIP'], True)
+            INFORMATION['MXORG'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', _whois['emails'][0])[0] 
+        except (UnicodeDecodeError, ValueError):
+            INFORMATION['MXORG'] = ''
 
-        except (UnicodeDecodeError, ValueError) as error:
-            whois_3 = False
-        try:
-            mxorg = whois_3['contacts']['registrant']['name']
-        except (KeyError, TypeError):
-            try:
-                mxorg = whois_3['emails'][0]
-            except (KeyError, TypeError):
-                mxorg = ''
-        INFORMATION['MXORG'] = mxorg
         try:
             INFORMATION['MXHR'] = socket.gethostbyaddr(INFORMATION['MXIP'])[0]
         except socket.error:
@@ -283,54 +278,58 @@ def get_whois(domain, event_ip):
     if DEBUG:
         print('get_whois start {}'.format(domain))
     try:
-        WHOIS = pythonwhois.get_whois(domain, True)
+        _whois = pythonwhois.get_whois(domain, True)
         if DEBUG:
             print('get_whois stop (success)')
     except UnicodeDecodeError:
-        INFORMATION['ERR1'] = 'Python whois UnicodeDecodeError (Domain)'
-        WHOIS = False
+        INFORMATION['error'] = 'Python whois UnicodeDecodeError'
         if DEBUG:
-            print('get_whois stop (with error)')
+            print('get_whois (exception)')
     
     # get expiry date
     try:
-        INFORMATION['EXP'] = WHOIS['expiration_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['EXP'] = _whois['expiration_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
         INFORMATION['EXP'] = ''
     
     # get expiry date
     try:
-        INFORMATION['CRE'] = WHOIS['creation_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['CRE'] = _whois['creation_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
         INFORMATION['CRE'] = ''
 
     # get modified
     try:
-        INFORMATION['MOD'] = WHOIS['updated_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['MOD'] = _whois['updated_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
         INFORMATION['MOD'] = ''
 
     # get status
     try:
-        status = ','.join(WHOIS['status'])
+        status = ','.join(_whois['status'])
     except (KeyError, TypeError):
         status = ''
     INFORMATION['STAT'] = status
 
     # get registrar
     try:
-        reg = ' '.join(WHOIS['registrar'])
+        reg = ' '.join(_whois['registrar'])
     except (KeyError, TypeError):
         reg = ''
     INFORMATION['REG'] = reg
 
     try:
-        ns_ = ' '.join(WHOIS['nameservers'])
+        ns_ = ' '.join(_whois['nameservers'])
     except (KeyError, TypeError):
         ns_ = ''
     INFORMATION['DNS'] = ns_
 
     # Would like Tech contact and such but pwhois seems to get much less thatn whois
+
+    if DEBUG:
+        print('get_whois stop')
+
+    
 
 def get_ip(domain, event_ip):
     """get whois from domain name"""
