@@ -5,6 +5,7 @@ import sys
 import socket
 import subprocess
 import time
+from datetime import datetime
 import urllib
 import re
 import requests
@@ -21,15 +22,9 @@ from collections import OrderedDict
 # https://github.com/joepie91/python-whois/pull/59
 
 # TODO make the script run in Docker instead
-# TODO dont check non domain name first argument, exit with notice
-# TODO dont fail on non existing domain
-# TODO warning: <48 hour DNS change
-# TODO Get MAIL (other, local, gsuite, outlook)
-# TODO Notice: MAIL on other than local with description
 # TODO Unit test
 # TODO Static type checking mypy
-# TODO Warning: MXHDN not in SPF
-# TODO Notice: IP not in SPF (Warning: if MAIL=local)
+
 
 # SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
@@ -54,8 +49,11 @@ INFORMATION = {}
 
 def main():
     """Main"""
+    if len(sys.argv) is 1:
+        sys.argv.append(input('Enter a domain name to analyze: '))
     domain = get_argument(1, None)
     problem = get_argument(2, None)
+    
     get_information(domain)
     suggestions = analyze(problem)
     output_console(suggestions)
@@ -73,10 +71,10 @@ def get_information(search):
     INFORMATION['SEARCH'] = search
 
     # get only domain name
-    INFORMATION['DN'] = search.split("//")[-1].split("/")[0] if '//' in search else search
+    INFORMATION['DOMAIN NAME'] = search.split("//")[-1].split("/")[0] if '//' in search else search
 
     # use only domain name for rest of the script
-    domain = INFORMATION['DN']
+    domain = INFORMATION['DOMAIN NAME']
 
     # get punycode
     try:
@@ -104,9 +102,16 @@ def analyze(problem):
     """Analyze problems with domain"""
     suggestions = {'error':[], 'warning':[], 'notice':[]}
 
+    # TODO warning: <48 hour DNS change, and expire in less than one month
+    if INFORMATION['TIME MODIFIED']:
+        if INFORMATION['TIME MOD DELTA'] < 2:
+            suggestions['warning'].append('DNS changed last 48 hours!')
+        elif INFORMATION['TIME MOD DELTA'] < 7:
+            suggestions['notice'].append('DNS changed last 7 days!')
+
     # notice slow site
-    if INFORMATION['TTLB_MS']:
-        if INFORMATION['TTLB_MS']>1000:
+    if INFORMATION['TTLB']:
+        if INFORMATION['TTLB']>1000:
             if '5.' in INFORMATION['PHP']:
                 suggestions['warning'].append('Slow site (Low PHP version detected)')
             elif INFORMATION['PHP']:
@@ -114,7 +119,7 @@ def analyze(problem):
             else:
                 suggestions['notice'].append('Slow site (PHP version not detected)')
 
-    if 'cloudflare' in INFORMATION['SRV']:
+    if 'cloudflare' in INFORMATION['SERVER']:
         suggestions['notice'].append('Cloudflare!')
 
     # warning no host 
@@ -126,10 +131,10 @@ def analyze(problem):
         suggestions['error'].append('No IP (No A-pointer)')
 
     # status
-    if 'transfer' in INFORMATION['STAT'].lower():
+    if 'transfer' in INFORMATION['STATUS'].lower():
         suggestions['notice'].append('Status code include "TRANSFER"')
     else:
-        if 'ok' not in INFORMATION['STAT'].lower():
+        if 'ok' not in INFORMATION['STATUS'].lower():
             suggestions['error'].append('Status code not "OK"')
 
     # ssl
@@ -141,14 +146,27 @@ def analyze(problem):
 
     # spf
     if 'spf' not in INFORMATION['TXT'].lower():
+        # no SPF record
         if problem == 'mail':
             suggestions['error'].append('No SPF record!')
         else:
             suggestions['warning'].append('No SPF record!')
+    else:
+        # SPF record exits
+        #if INFORMATION['MX DOMAIN NAME'] not in INFORMATION['TXT']:
+        if not any(host_ not in INFORMATION['TXT'] for host_ in [INFORMATION['MX DOMAIN NAME'], INFORMATION['MX ORGANIZATION']]):
+            suggestions['warning'].append('Mail host not in SPF!')
+        if INFORMATION['IP'] not in INFORMATION['TXT']:
+            if INFORMATION['IP'] is INFORMATION['MXIP']:
+                # warning: ip not in spf and site and mail on same server
+                suggestions['warning'].append('IP not in SPF!')
+            else:
+                # notice: ip not in spf and site and mail on different server
+                suggestions['notice'].append('IP not in SPF!')
 
     # mail
-    if INFORMATION['HOSTDN'] != INFORMATION['MXHDN']:
-        suggestions['notice'].append('External mail hosted at {}!'.format(INFORMATION['MXHDN']))
+    if INFORMATION['DOMAIN NAME HOST'] != INFORMATION['MX DOMAIN NAME']:
+        suggestions['notice'].append('External mail hosted at {}!'.format(INFORMATION['MX DOMAIN NAME']))
 
     return suggestions
 
@@ -160,9 +178,9 @@ def output_console(suggestions):
         if value:
             if value is True:
                 value = 'Yes'
-            print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], value))
+            print('{}{}{}{}'.format(COLOR['bold'], "{:<17}".format(key), COLOR['end'], value))
         else:
-            print('{}{}{}\t{}'.format(COLOR['bold'], key, COLOR['end'], ''))
+            print('{}{}{}{}'.format(COLOR['bold'], key, COLOR['end'], ''))
     for error_msg in suggestions['error']:
         print('Error! {}{}{}{}'.format(COLOR['bold'], COLOR['red'], error_msg, COLOR['end']))
     for warning_msg in suggestions['warning']:
@@ -178,10 +196,10 @@ def get_host(domain, event_ip):
     global INFORMATION
     try:
         INFORMATION['HOST'] = socket.gethostbyaddr(INFORMATION['IP'])[0]
-        INFORMATION['HOSTDN'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFORMATION['HOST'])[0] 
+        INFORMATION['DOMAIN NAME HOST'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFORMATION['HOST'])[0] 
     except socket.error:
         INFORMATION['HOST'] = ''
-        INFORMATION['HOSTDN'] = ''
+        INFORMATION['DOMAIN NAME HOST'] = ''
         
     if DEBUG:
         print('get_host stop')
@@ -197,7 +215,7 @@ def get_txt(domain, event_ip):
         else:
             domain_dig = domain
         INFORMATION['TXT'] = '\n\t'.join([txt.to_text() for txt in dns.resolver.query(domain_dig, 'TXT')])
-    except (socket.error, dns.resolver.NoAnswer):
+    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
         INFORMATION['TXT'] = ''
     if DEBUG:
         print('get_txt stop')
@@ -209,20 +227,20 @@ def get_mx(domain, event_ip):
     global INFORMATION
     try:
         # get mx from resolver for domain then make list and concat to string with newline
-        INFORMATION['MX'] = '\n\t'.join([mx.to_text() for mx in dns.resolver.query(domain, 'MX')])
+        INFORMATION['MX'] = '\n\t\t '.join([mx.to_text() for mx in dns.resolver.query(domain, 'MX')])
         # get second word that ends with a dot excluding that dot
-        INFORMATION['MXH'] = re.findall(r'.* (.*).', INFORMATION['MX'])[0]
-        INFORMATION['MXHDN'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFORMATION['MXH'])[0] 
-    except (socket.error, dns.resolver.NoAnswer):
+        INFORMATION['MX HOST'] = re.findall(r'.* (.*).', INFORMATION['MX'])[0]
+        INFORMATION['MX DOMAIN NAME'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFORMATION['MX HOST'])[0] 
+    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
         INFORMATION['MX'] = ''
-        INFORMATION['MXH'] = ''
-        INFORMATION['MXHDN'] = ''
+        INFORMATION['MX HOST'] = ''
+        INFORMATION['MX DOMAIN NAME'] = ''
     if DEBUG:
         print('get_mx stop')
     global RES
-    if INFORMATION['MXH']:
+    if INFORMATION['MX HOST']:
         try:
-            INFORMATION['MXIP'] = RES.query(INFORMATION['MXH'])[0].address
+            INFORMATION['MXIP'] = RES.query(INFORMATION['MX HOST'])[0].address
         except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
             INFORMATION['MXIP'] = ''
     else:
@@ -232,18 +250,18 @@ def get_mx(domain, event_ip):
         # get org name from MXIP
         try:
             _whois = pythonwhois.get_whois(INFORMATION['MXIP'], True)
-            INFORMATION['MXORG'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', _whois['emails'][0])[0] 
+            INFORMATION['MX ORGANIZATION'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', _whois['emails'][0])[0] 
         except (UnicodeDecodeError, ValueError):
-            INFORMATION['MXORG'] = ''
+            INFORMATION['MX ORGANIZATION'] = ''
 
         try:
             INFORMATION['MXHR'] = socket.gethostbyaddr(INFORMATION['MXIP'])[0]
         except socket.error:
             INFORMATION['MXHR'] = ''
     else:
-        INFORMATION['MXORG'] = ''
+        INFORMATION['MX ORGANIZATION'] = ''
         INFORMATION['MXHR'] = ''
-        INFORMATION['MXORG'] = ''
+        INFORMATION['MX ORGANIZATION'] = ''
         
 def get_mxorg(domain, event_ip):
     # get Org name from mx ip when ip is avalible
@@ -265,12 +283,12 @@ def get_mxorg(domain, event_ip):
                 org = whois_2['emails'][0]
             except (KeyError, TypeError):
                 org = ''
-        INFORMATION['MXORG'] = org
+        INFORMATION['MX ORGANIZATION'] = org
         if DEBUG:
             print('get_mxorg stop')
 
     except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
-        INFORMATION['MXORG'] = ''
+        INFORMATION['MX ORGANIZATION'] = ''
         
 def get_whois(domain, event_ip):
     """get whois from domain name"""
@@ -288,35 +306,38 @@ def get_whois(domain, event_ip):
     
     # get expiry date
     try:
-        INFORMATION['EXP'] = _whois['expiration_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['TIME EXPIRE'] = _whois['expiration_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
-        INFORMATION['EXP'] = ''
+        INFORMATION['TIME EXPIRE'] = ''
     
     # get expiry date
     try:
-        INFORMATION['CRE'] = _whois['creation_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['TIME CREATED'] = _whois['creation_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
-        INFORMATION['CRE'] = ''
+        INFORMATION['TIME CREATED'] = ''
 
     # get modified
     try:
-        INFORMATION['MOD'] = _whois['updated_date'][0].strftime("%Y-%m-%d")
+        INFORMATION['TIME MODIFIED'] = _whois['updated_date'][0].strftime("%Y-%m-%d %H:%I:%S")
+        _detla_datetime = datetime.now() - _whois['updated_date'][0]
+        INFORMATION['TIME MOD DELTA'] = round((_detla_datetime.seconds / 3600 / 24 ) + float(_detla_datetime.days), 2)
     except (KeyError, TypeError):
-        INFORMATION['MOD'] = ''
+        INFORMATION['TIME MODIFIED'] = ''
+        INFORMATION['TIME MOD DELTA'] = ''
 
     # get status
     try:
         status = ','.join(_whois['status'])
     except (KeyError, TypeError):
         status = ''
-    INFORMATION['STAT'] = status
+    INFORMATION['STATUS'] = status
 
     # get registrar
     try:
         reg = ' '.join(_whois['registrar'])
     except (KeyError, TypeError):
         reg = ''
-    INFORMATION['REG'] = reg
+    INFORMATION['REGISTRAR'] = reg
 
     try:
         ns_ = ' '.join(_whois['nameservers'])
@@ -343,8 +364,12 @@ def get_ip(domain, event_ip):
         for rdata in answers:
             ips.append(rdata.address)
         INFORMATION['IP'] = ips[0]
+    except dns.resolver.NXDOMAIN:
+        INFORMATION['IP'] = ''
+        INFORMATION['DOMAIN NAME'] = '{} (No such domain)'.format(INFORMATION['DOMAIN NAME'])
     except (dns.resolver.NXDOMAIN, dns.resolver.Timeout, dns.exception.DNSException):
         INFORMATION['IP'] = ''
+    
     if DEBUG:
         print('get_ip stop')
     event_ip.set()
@@ -356,9 +381,9 @@ def get_wpadmin(domain, event_ip):
     try:
         result = requests.get('http://{}/wp-admin'.format(domain))
         if result.status_code == 200:
-            INFORMATION['WP'] = True
+            INFORMATION['WORDPRESS'] = True
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
-        INFORMATION['WP'] = False
+        INFORMATION['WORDPRESS'] = False
     if DEBUG:
         print('get_wpadmin stop')
 
@@ -377,7 +402,6 @@ def get_statuscodes(domain, event_ip):
     except (urllib.error.HTTPError, ConnectionResetError, urllib.error.URLError) as error:
         INFORMATION['TITLE'] = ''
         INFORMATION['SPEED'] = ''
-        INFORMATION['ERR3'] = 'Unable to get site {}'.format(error)
     if DEBUG:
         print('get_statuscodes stop')
 
@@ -400,11 +424,11 @@ def get_srv(domain, event_ip):
     try:
         site = requests.get('http://{}'.format(domain))
         try:
-            INFORMATION['SRV'] = site.headers['server']
+            INFORMATION['SERVER'] = site.headers['server']
         except KeyError:
-            INFORMATION['SRV'] = ''
+            INFORMATION['SERVER'] = ''
     except requests.exceptions.RequestException:
-        INFORMATION['SRV'] = ''
+        INFORMATION['SERVER'] = ''
     if DEBUG:
         print('get_srv stop')
 
@@ -442,13 +466,13 @@ def page_speed(domain, event_ip):
         resp = opener.open(request)
         # read one byte
         resp.read(1)
-        INFORMATION['TTFB_MS'] = int(round(time.time() * 1000)) - start
+        INFORMATION['TTFB'] = int(round(time.time() * 1000)) - start
         # read the rest
         resp.read()
-        INFORMATION['TTLB_MS'] = int(round(time.time() * 1000)) - start
+        INFORMATION['TTLB'] = int(round(time.time() * 1000)) - start
     except (urllib.error.HTTPError, urllib.error.URLError):
-        INFORMATION['TTFB_MS'] = ''
-        INFORMATION['TTLB_MS'] = ''
+        INFORMATION['TTFB'] = ''
+        INFORMATION['TTLB'] = ''
 
 if __name__ == "__main__":
     main()
