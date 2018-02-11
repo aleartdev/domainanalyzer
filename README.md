@@ -8,5 +8,5 @@
 * mkdir ~/domainanalyzer && cd ~/domainanalyzer
 * git clone https://github.com/freiholtz/domainanalyzer.git
 * pip install -r requirements.txt --no-index
-* Add this alias to your bash profile: alias domain python3 ~/domainanalyzer
+* Add this alias to your bash profile: alias domain python3 ~/domainanalyzer/domainanalyzer.py
 * Test by typing: domain davidfrehioltz.com
