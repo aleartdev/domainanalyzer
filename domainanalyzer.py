@@ -21,10 +21,10 @@ from collections import OrderedDict
 # you need to implement this fix on net.py in pythonwhois on your local computer
 # https://github.com/joepie91/python-whois/pull/59
 
-# TODO make the script run in Docker instead
-# TODO Unit test
-# TODO Static type checking mypy
-
+# TODO Docker
+# TODO unittest https://docs.python.org/3/library/unittest.html
+# TODO Static type checking mypy http://mypy-lang.org/examples.html 
+# TODO Do I need "problem" argument? scenarios [mail, speed, transfer, owner, ssl, down]
 
 # SETTINGS
 RESOVING_NAMESERVER = '8.8.8.8'
@@ -131,11 +131,8 @@ def analyze(problem):
         suggestions['error'].append('No IP (No A-pointer)')
 
     # status
-    if 'transfer' in INFORMATION['STATUS'].lower():
-        suggestions['notice'].append('Status code include "TRANSFER"')
-    else:
-        if 'ok' not in INFORMATION['STATUS'].lower():
-            suggestions['error'].append('Status code not "OK"')
+    if 'ok' not in INFORMATION['STATUS'].lower():
+        suggestions['warning'].append('Status code not "OK": {}'.format(INFORMATION['STATUS']))
 
     # ssl
     if INFORMATION['SSL'] == 'No':
@@ -153,8 +150,7 @@ def analyze(problem):
             suggestions['warning'].append('No SPF record!')
     else:
         # SPF record exits
-        #if INFORMATION['MX DOMAIN NAME'] not in INFORMATION['TXT']:
-        if not any(host_ not in INFORMATION['TXT'] for host_ in [INFORMATION['MX DOMAIN NAME'], INFORMATION['MX ORGANIZATION']]):
+        if not any(host_ in INFORMATION['TXT'] for host_ in [INFORMATION['MX DOMAIN NAME'], INFORMATION['MX ORGANIZATION']]):
             suggestions['warning'].append('Mail host not in SPF!')
         if INFORMATION['IP'] not in INFORMATION['TXT']:
             if INFORMATION['IP'] is INFORMATION['MXIP']:
@@ -165,8 +161,8 @@ def analyze(problem):
                 suggestions['notice'].append('IP not in SPF!')
 
     # mail
-    if INFORMATION['DOMAIN NAME HOST'] != INFORMATION['MX DOMAIN NAME']:
-        suggestions['notice'].append('External mail hosted at {}!'.format(INFORMATION['MX DOMAIN NAME']))
+    if INFORMATION['DOMAIN NAME HOST'] != INFORMATION['MX DOMAIN NAME'] and INFORMATION['MX DOMAIN NAME']:
+        suggestions['notice'].append('External mail hosted at {} ({})!'.format(INFORMATION['MX DOMAIN NAME'], INFORMATION['MX ORGANIZATION']))
 
     return suggestions
 
@@ -269,7 +265,6 @@ def get_mxorg(domain, event_ip):
     if DEBUG:
         print('get_mxorg start')
     global INFORMATION
-    
     try:
         try:
             whois_2 = pythonwhois.get_whois(INFORMATION['IP'], True)
@@ -295,6 +290,8 @@ def get_whois(domain, event_ip):
     global INFORMATION
     if DEBUG:
         print('get_whois start {}'.format(domain))
+    if domain.count('.') > 1:
+        domain = '.'.join(domain.split('.')[-2:])
     try:
         _whois = pythonwhois.get_whois(domain, True)
         if DEBUG:
@@ -399,7 +396,7 @@ def get_statuscodes(domain, event_ip):
         except (AttributeError, AssertionError):
             INFORMATION['TITLE'] = ''
 
-    except (urllib.error.HTTPError, ConnectionResetError, urllib.error.URLError) as error:
+    except (urllib.error.HTTPError, ConnectionResetError, urllib.error.URLError):
         INFORMATION['TITLE'] = ''
         INFORMATION['SPEED'] = ''
     if DEBUG:
