@@ -161,7 +161,7 @@ def analyze(problem):
                 suggestions['notice'].append('IP not in SPF!')
 
     # mail
-    if INFORMATION['DOMAIN NAME HOST'] != INFORMATION['MX DOMAIN NAME'] and INFORMATION['MX DOMAIN NAME']:
+    if INFORMATION['DOMAIN NAME HOST'] not in INFORMATION['MXHR'] and INFORMATION['MX DOMAIN NAME']:
         suggestions['notice'].append('External mail hosted at {} ({})!'.format(INFORMATION['MX DOMAIN NAME'], INFORMATION['MX ORGANIZATION']))
 
     return suggestions
