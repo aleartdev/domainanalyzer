@@ -15,6 +15,7 @@ import lxml.html
 from threading import Thread
 import threading
 from collections import OrderedDict
+import http.client
 
 # If you want pwhois to handle non standard characters in result
 # you need to implement this fix on net.py in pythonwhois
@@ -111,7 +112,10 @@ def analyze(problem):
         if INFORMATION['TIME MOD DELTA'] < 2:
             suggestions['warning'].append('DNS changed last 48 hours!')
         elif INFORMATION['TIME MOD DELTA'] < 7:
-            suggestions['notice'].append('DNS changed last 7 days!')
+            if problem == 'ssl':
+                suggestions['warning'].append('DNS changed last 7 days!')
+            else:
+                suggestions['notice'].append('DNS changed last 7 days!')
 
     # notice slow site
     if INFORMATION['TTLB']:
@@ -154,8 +158,7 @@ def analyze(problem):
             suggestions['warning'].append('No SPF record!')
     else:
         # SPF record exits
-        if not any(host_ in INFORMATION['TXT'] for host_ in [INFORMATION['MX DOMAIN NAME'],
-                   INFORMATION['MX ORGANIZATION']]):
+        if not any(host_ in INFORMATION['TXT'] for host_ in [INFORMATION['MX DOMAIN NAME'],host_domain(INFORMATION['MX ORGANIZATION']),host_domain(INFORMATION['MXHR'])]):
             suggestions['warning'].append('Mail host not in SPF!')
         if INFORMATION['IP'] not in INFORMATION['TXT']:
             if INFORMATION['IP'] is INFORMATION['MXIP']:
@@ -172,6 +175,9 @@ def analyze(problem):
 
     return suggestions
 
+def host_domain(host):
+    """Return domain from host."""
+    return '.'.join(host.split('.')[-2:])
 
 def output_console(suggestions):
     """Output suggestions to console."""
@@ -504,7 +510,7 @@ def page_speed(domain, event_ip):
         # read the rest
         resp.read()
         INFORMATION['TTLB'] = int(round(time.time() * 1000)) - start
-    except (urllib.error.HTTPError, urllib.error.URLError):
+    except (urllib.error.HTTPError, urllib.error.URLError, http.client.HTTPException):
         INFORMATION['TTFB'] = ''
         INFORMATION['TTLB'] = ''
 
