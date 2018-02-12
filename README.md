@@ -1,7 +1,7 @@
 # domainanalyzer
 # Python Domain name and site analyzer
 
-> A python program that takes a domain name and outputs as much relevant data as possiblie suitble for touble shooting a domain, mail or site. Suitbile for hosting tech support. 
+> Analyze a domain name to get data  about it and give feedbak to user in the form of data and notices , warnings, errors.
 
 ## Installation
 
