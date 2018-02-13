@@ -15,16 +15,17 @@ import lxml.html
 from threading import Thread
 import threading
 import http.client
-import logging
 
 # If you want pwhois to handle non standard characters in result
 # you need to implement this fix on net.py in pythonwhois
 # https://github.com/joepie91/python-whois/pull/59
 
 # TODO Docker
-# TODO unittest https://docs.python.org/3/library/unittest.html
+# TODO Unittest https://docs.python.org/3/library/unittest.html
 # TODO Static type checking mypy http://mypy-lang.org/examples.html
-# TODO import logging and
+# TODO Logging instead of debug
+# TODO JSON output instead of printout to console
+# TODO CLI argument handler
 
 # SETTINGS
 RES = resolver.Resolver()
@@ -98,7 +99,6 @@ def analyze(problem):
     """Analyze problems with domain."""
     suggestions = {'error': [], 'warning': [], 'notice': []}
 
-    # TODO warning: <48 hour DNS change, and expire in less than one month
     if INFORMATION['TIME MODIFIED']:
         if INFORMATION['TIME MOD DELTA'] < 2:
             suggestions['warning'].append('DNS changed last 48 hours!')

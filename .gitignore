@@ -30,6 +30,7 @@
 # VSCode #
 ######################
 setup.cfg
+.vscode/
 
 # OS generated files #
 ######################
