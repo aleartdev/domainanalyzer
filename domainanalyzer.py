@@ -15,6 +15,7 @@ import lxml.html
 from threading import Thread
 import threading
 import http.client
+import logging
 
 # If you want pwhois to handle non standard characters in result
 # you need to implement this fix on net.py in pythonwhois
@@ -24,7 +25,6 @@ import http.client
 # TODO unittest https://docs.python.org/3/library/unittest.html
 # TODO Static type checking mypy http://mypy-lang.org/examples.html
 # TODO import logging and
-
 
 # SETTINGS
 RES = resolver.Resolver()
