@@ -15,7 +15,6 @@ import lxml.html
 from threading import Thread
 import threading
 import http.client
-from urllib.parse import urlparse
 
 # If you want pwhois to handle non standard characters in result
 # you need to implement this fix on net.py in pythonwhois
@@ -25,6 +24,7 @@ from urllib.parse import urlparse
 # TODO unittest https://docs.python.org/3/library/unittest.html
 # TODO Static type checking mypy http://mypy-lang.org/examples.html
 # TODO import logging and
+
 
 # SETTINGS
 RES = resolver.Resolver()
@@ -55,12 +55,16 @@ def get_argument(index, return_except):
         return return_except
 
 
+def parse_search(search: str) -> str:
+    """So the search can be converted to a domain."""
+    return search.split("//")[-1].split("/")[0] if '//' in search else search
+
+
 def get_information(search):
     """Get domain information."""
     INFORMATION['SEARCH'] = search
 
-    # TODO INFORMATION['DOMAIN NAME'] = urlparse(search).netloc
-    INFORMATION['DOMAIN NAME'] = search.split("//")[-1].split("/")[0] if '//' in search else search
+    INFORMATION['DOMAIN NAME'] = parse_search(search)
 
     # use only domain name for rest of the script
     domain = INFORMATION['DOMAIN NAME']
@@ -108,18 +112,18 @@ def analyze(problem):
     if INFORMATION['TTLB']:
         if INFORMATION['TTLB'] > 1000:
             if '5.' in INFORMATION['PHP']:
-                suggestions['warning'].append('Slow site (Low PHP version detected)')
+                suggestions['warning'].append('Slow site (Low PHP version)')
             elif INFORMATION['PHP']:
-                suggestions['notice'].append('Slow site (Not PHP version related)')
+                suggestions['notice'].append('Slow site (Not PHP version)')
             else:
-                suggestions['notice'].append('Slow site (PHP version not detected)')
+                suggestions['notice'].append('Slow site (PHP version unknown)')
 
     if 'cloudflare' in INFORMATION['SERVER']:
         suggestions['notice'].append('Cloudflare!')
 
     # warning no host
     if not INFORMATION['HOST'] and INFORMATION['IP']:
-        suggestions['notice'].append('No host name for A-pointer, possible on VPS or dedicated IP!')
+        suggestions['notice'].append('No host found. (VPS or dedicated IP?')
 
     # no ip
     if not INFORMATION['IP']:
@@ -464,7 +468,7 @@ def get_php(domain, event_ip):
         except KeyError:
             php = ''
         try:
-            size = round(int(result.headers['Content-length'])/1024)
+            size = round(int(result.headers['Content-length']) / 1024)
             INFORMATION['SIZE'] = '{} kB'.format(size)
         except KeyError:
             INFORMATION['SIZE'] = ''
