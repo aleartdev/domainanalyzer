@@ -14,8 +14,8 @@ from dns import resolver
 import lxml.html
 from threading import Thread
 import threading
-from collections import OrderedDict
 import http.client
+from urllib.parse import urlparse
 
 # If you want pwhois to handle non standard characters in result
 # you need to implement this fix on net.py in pythonwhois
@@ -24,25 +24,12 @@ import http.client
 # TODO Docker
 # TODO unittest https://docs.python.org/3/library/unittest.html
 # TODO Static type checking mypy http://mypy-lang.org/examples.html
-# TODO Do I need "problem" argument? [mail, speed, owner, ssl, down]
+# TODO import logging and
 
 # SETTINGS
-RESOVING_NAMESERVER = '8.8.8.8'
 RES = resolver.Resolver()
-RES.nameservers = [RESOVING_NAMESERVER]
+RES.nameservers = ['8.8.8.8']
 DEBUG = False
-COLOR = {
-    'purple': '\033[95m',
-    'cyan': '\033[96m',
-    'darkcyan': '\033[36m',
-    'blue': '\033[94m',
-    'green': '\033[92m',
-    'yellow': '\033[93m',
-    'red': '\033[91m',
-    'bold': '\033[1m',
-    'underline': '\033[4m',
-    'end': '\033[0m'
-}
 
 # GLOBALS to write to from threads
 INFORMATION = {}
@@ -72,7 +59,7 @@ def get_information(search):
     """Get domain information."""
     INFORMATION['SEARCH'] = search
 
-    # get only domain name
+    # TODO INFORMATION['DOMAIN NAME'] = urlparse(search).netloc
     INFORMATION['DOMAIN NAME'] = search.split("//")[-1].split("/")[0] if '//' in search else search
 
     # use only domain name for rest of the script
@@ -158,7 +145,7 @@ def analyze(problem):
             suggestions['warning'].append('No SPF record!')
     else:
         # SPF record exits
-        if not any(host_ in INFORMATION['TXT'] for host_ in [INFORMATION['MX DOMAIN NAME'],host_domain(INFORMATION['MX ORGANIZATION']),host_domain(INFORMATION['MXHR'])]):
+        if not any(host_ in INFORMATION['TXT'] for host_ in [INFORMATION['MX DOMAIN NAME'], host_domain(INFORMATION['MX ORGANIZATION']), host_domain(INFORMATION['MXHR'])]):
             suggestions['warning'].append('Mail host not in SPF!')
         if INFORMATION['IP'] not in INFORMATION['TXT']:
             if INFORMATION['IP'] is INFORMATION['MXIP']:
@@ -170,42 +157,54 @@ def analyze(problem):
 
     # mail
     if INFORMATION['DOMAIN NAME HOST'] not in INFORMATION['MXHR'] and INFORMATION['MX DOMAIN NAME']:
-        suggestions['notice'].append('External mail hosted at {} ({})!'.format(INFORMATION['MX DOMAIN NAME'],
-                                                                               INFORMATION['MX ORGANIZATION']))
+        suggestions['notice'].append('External mail hosted at {} ({})!'.format(INFORMATION['MX DOMAIN NAME'], INFORMATION['MX ORGANIZATION']))
 
     return suggestions
+
 
 def host_domain(host):
     """Return domain from host."""
     return '.'.join(host.split('.')[-2:])
 
+
 def output_console(suggestions):
     """Output suggestions to console."""
-    global INFORMATION
-    INFORMATION = OrderedDict(sorted(INFORMATION.items()))
-    for key, value in INFORMATION.items():
+    color = {
+        'purple': '\033[95m',
+        'cyan': '\033[96m',
+        'darkcyan': '\033[36m',
+        'blue': '\033[94m',
+        'green': '\033[92m',
+        'yellow': '\033[93m',
+        'red': '\033[91m',
+        'bold': '\033[1m',
+        'underline': '\033[4m',
+        'end': '\033[0m'
+    }
+    for key, value in sorted(INFORMATION.items()):
         if value:
             if value is True:
+                # make True visible in output
                 value = 'Yes'
-            print('{}{}{}{}'.format(COLOR['bold'], "{:<17}".format(key),
-                                    COLOR['end'], value))
+            print('{}{}{}{}'.format(color['bold'], "{:<17}".format(key),
+                                    color['end'], value))
         else:
-            print('{}{}{}{}'.format(COLOR['bold'],
-                                    key, COLOR['end'], ''))
+            print('{}{}{}{}'.format(color['bold'],
+                                    key, color['end'], ''))
     for error_msg in suggestions['error']:
-        print('Error! {}{}{}{}'.format(COLOR['bold'], COLOR['red'],
-                                       error_msg, COLOR['end']))
+        print('Error! {}{}{}{}'.format(color['bold'], color['red'],
+                                       error_msg, color['end']))
     for warning_msg in suggestions['warning']:
-        print('Warning! {}{}{}{}'.format(COLOR['bold'], COLOR['yellow'],
-                                         warning_msg, COLOR['end']))
+        print('Warning! {}{}{}{}'.format(color['bold'], color['yellow'],
+                                         warning_msg, color['end']))
     for notice_msg in suggestions['notice']:
-        print('Notice! {}{}{}{}'.format(COLOR['bold'], COLOR['darkcyan'],
-                                        notice_msg, COLOR['end']))
+        print('Notice! {}{}{}{}'.format(color['bold'], color['darkcyan'],
+                                        notice_msg, color['end']))
 
 
 def get_host(domain, event_ip):
     """Get host from domain name."""
-    # get host from ip when ip is avalible
+    # we must wait for ip to be avalible from other thread
     event_ip.wait()
     if DEBUG:
         print('get_host start')
@@ -224,7 +223,6 @@ def get_host(domain, event_ip):
 
 def get_txt(domain, event_ip):
     """Get TXT from domain name."""
-    # get dns mx pointers for domain
     if DEBUG:
         print('get_txt start')
     global INFORMATION
@@ -233,8 +231,7 @@ def get_txt(domain, event_ip):
             domain_dig = INFORMATION['IDN']
         else:
             domain_dig = domain
-        INFORMATION['TXT'] = '\n\t'.join([txt.to_text() for txt in dns.resolver.query(domain_dig,
-                                                                                      'TXT')])
+        INFORMATION['TXT'] = '\n\t\t '.join([txt.to_text() for txt in dns.resolver.query(domain_dig, 'TXT')])
     except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
         INFORMATION['TXT'] = ''
     if DEBUG:
@@ -243,18 +240,15 @@ def get_txt(domain, event_ip):
 
 def get_mx(domain, event_ip):
     """Get MX from domain name."""
-    # get dns mx pointers for domain
     if DEBUG:
         print('get_mx start')
     global INFORMATION
     try:
         # get mx from resolver and make list and make string
-        INFORMATION['MX'] = '\n\t\t '.join([mx.to_text() for mx in dns.resolver.query(domain,
-                                                                                      'MX')])
+        INFORMATION['MX'] = '\n\t\t '.join([mx.to_text() for mx in dns.resolver.query(domain, 'MX')])
         # get second word that ends with a dot excluding that dot
         INFORMATION['MX HOST'] = re.findall(r'.* (.*).', INFORMATION['MX'])[0]
-        INFORMATION['MX DOMAIN NAME'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)',
-                                                   INFORMATION['MX HOST'])[0]
+        INFORMATION['MX DOMAIN NAME'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFORMATION['MX HOST'])[0]
     except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
         INFORMATION['MX'] = ''
         INFORMATION['MX HOST'] = ''
@@ -275,11 +269,9 @@ def get_mx(domain, event_ip):
         # get org name from MXIP
         try:
             _whois = pythonwhois.get_whois(INFORMATION['MXIP'], True)
-            INFORMATION['MX ORGANIZATION'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)',
-                                                        _whois['emails'][0])[0]
+            INFORMATION['MX ORGANIZATION'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', _whois['emails'][0])[0]
         except (UnicodeDecodeError, ValueError):
             INFORMATION['MX ORGANIZATION'] = ''
-
         try:
             INFORMATION['MXHR'] = socket.gethostbyaddr(INFORMATION['MXIP'])[0]
         except socket.error:
@@ -292,7 +284,7 @@ def get_mx(domain, event_ip):
 
 def get_mxorg(domain, event_ip):
     """Get organization from MX IP."""
-    # get Org name from mx ip when ip is avalible
+    # we must wait for ip to be avalible from other thread
     event_ip.wait()
     if DEBUG:
         print('get_mxorg start')
@@ -336,48 +328,38 @@ def get_whois(domain, event_ip):
         if DEBUG:
             print('get_whois (exception)')
 
-    # get expiry date
     try:
         INFORMATION['TIME EXPIRE'] = _whois['expiration_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
         INFORMATION['TIME EXPIRE'] = ''
 
-    # get expiry date
     try:
         INFORMATION['TIME CREATED'] = _whois['creation_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
         INFORMATION['TIME CREATED'] = ''
 
-    # get modified
     try:
         INFORMATION['TIME MODIFIED'] = _whois['updated_date'][0].strftime("%Y-%m-%d %H:%I:%S")
         _detla_datetime = datetime.now() - _whois['updated_date'][0]
-        INFORMATION['TIME MOD DELTA'] = round((_detla_datetime.seconds /
-                                              3600 / 24) +
-                                              float(_detla_datetime.days), 2)
+        INFORMATION['TIME MOD DELTA'] = round((_detla_datetime.seconds / 3600 / 24) + float(_detla_datetime.days), 2)
     except (KeyError, TypeError):
         INFORMATION['TIME MODIFIED'] = ''
         INFORMATION['TIME MOD DELTA'] = ''
 
-    # get status
     try:
-        status = ','.join(_whois['status'])
+        INFORMATION['STATUS'] = ','.join(_whois['status'])
     except (KeyError, TypeError):
-        status = ''
-    INFORMATION['STATUS'] = status
-
-    # get registrar
-    try:
-        reg = ' '.join(_whois['registrar'])
-    except (KeyError, TypeError):
-        reg = ''
-    INFORMATION['REGISTRAR'] = reg
+        INFORMATION['STATUS'] = ''
 
     try:
-        ns_ = ' '.join(_whois['nameservers'])
+        INFORMATION['REGISTRAR'] = ' '.join(_whois['registrar'])
     except (KeyError, TypeError):
-        ns_ = ''
-    INFORMATION['DNS'] = ns_
+        INFORMATION['REGISTRAR'] = ''
+
+    try:
+        INFORMATION['DNS'] = ' '.join(_whois['nameservers'])
+    except (KeyError, TypeError):
+        INFORMATION['DNS'] = ''
 
     if DEBUG:
         print('get_whois stop')
@@ -387,8 +369,6 @@ def get_ip(domain, event_ip):
     """Get whois from domain name."""
     if DEBUG:
         print('get_ip start {}'.format(domain))
-    # create resolver object
-    global RES
     ips = []
     try:
         answers = RES.query(domain)
