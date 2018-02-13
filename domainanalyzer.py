@@ -56,7 +56,7 @@ def get_argument(index, return_except):
         return return_except
 
 
-def parse_search(search: str) -> str:
+def parse_search(search):
     """So the search can be converted to a domain."""
     return search.split("//")[-1].split("/")[0] if '//' in search else search
 
