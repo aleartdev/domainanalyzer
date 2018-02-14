@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Get information and discover problems with a domain name."""
+"""Get information on a domain name."""
 # coding=utf-8
-import sys
-import socket
-import time
 from datetime import datetime
-import urllib
-import re
-import requests
-import pythonwhois
 import dns
 from dns import resolver
+import http.client
 import lxml.html
+import pythonwhois
+import re
+import requests
+import socket
+import sys
 from threading import Thread
 import threading
-import http.client
+import time
+import urllib
 
 # If you want pwhois to handle non standard characters in result
 # you need to implement this fix on net.py in pythonwhois
@@ -24,28 +24,25 @@ import http.client
 # TODO Unittest https://docs.python.org/3/library/unittest.html
 # TODO Static type checking mypy http://mypy-lang.org/examples.html
 # TODO Logging instead of debug
-# TODO JSON output instead of printout to console
-# TODO CLI argument handler
+# TODO Class
+# TODO JSON output flag overriding printout to console
+
 
 # SETTINGS
 RES = resolver.Resolver()
 RES.nameservers = ['8.8.8.8']
 DEBUG = False
 
-# GLOBALS to write to from threads
-INFORMATION = {}
+# Information about the domain is asyncly gatherd here
+INFO = {}
 
 
 def main():
     """Main."""
-    if len(sys.argv) is 1:
-        sys.argv.append(input('Enter a domain name to analyze: '))
-    domain = get_argument(1, None)
-    problem = get_argument(2, None)
-
-    get_information(domain)
-    suggestions = analyze(problem)
-    output_console(suggestions)
+    _domain_ = get_argument(1, None)
+    parse_search(_domain_)
+    get_information()
+    output_console(analyze())
 
 
 def get_argument(index, return_except):
@@ -58,35 +55,28 @@ def get_argument(index, return_except):
 
 def parse_search(search):
     """So the search can be converted to a domain."""
-    return search.split("//")[-1].split("/")[0] if '//' in search else search
-
-
-def get_information(search):
-    """Get domain information."""
-    INFORMATION['SEARCH'] = search
-
-    INFORMATION['DOMAIN NAME'] = parse_search(search)
-
-    # use only domain name for rest of the script
-    domain = INFORMATION['DOMAIN NAME']
-
+    INFO['SEARCH'] = search
+    _domain_name_ = search.split("//")[-1].split("/")[0] if '//' in search else search
+    INFO['DOMAIN NAME'] = _domain_name_
     # get punycode
     try:
-        domain.encode(encoding='utf-8').decode('ascii')
+        _domain_name_.encode(encoding='utf-8').decode('ascii')
     except UnicodeDecodeError:
-        domain_punycode = domain.encode("idna").decode("utf-8")
+        domain_punycode = _domain_name_.encode("idna").decode("utf-8")
     else:
         domain_punycode = ''
-    INFORMATION['IDN'] = domain_punycode
+    INFO['IDN'] = domain_punycode
 
-    # Split work into threads
+
+def get_information():
+    """Get domain information and split work in to threads."""
     event_ip = threading.Event()
     functions = [get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl,
                  get_srv, get_php, get_ip, get_host, get_mx, get_txt]
     threads_list = list()
     for function in functions:
         threads_list.append(Thread(name=function, target=function,
-                            args=(domain, event_ip)))
+                            args=(INFO['DOMAIN NAME'], event_ip)))
 
     for thread in threads_list:
         thread.start()
@@ -95,64 +85,54 @@ def get_information(search):
         thread.join()
 
 
-def analyze(problem):
-    """Analyze problems with domain."""
+def analyze():
+    """Analyze domain."""
     suggestions = {'error': [], 'warning': [], 'notice': []}
 
-    if INFORMATION['TIME MODIFIED']:
-        if INFORMATION['TIME MOD DELTA'] < 2:
+    if INFO['TIME MODIFIED']:
+        if INFO['TIME MOD DELTA'] < 2:
             suggestions['warning'].append('DNS changed last 48 hours!')
-        elif INFORMATION['TIME MOD DELTA'] < 7:
-            if problem == 'ssl':
-                suggestions['warning'].append('DNS changed last 7 days!')
-            else:
-                suggestions['notice'].append('DNS changed last 7 days!')
+        elif INFO['TIME MOD DELTA'] < 7:
+            suggestions['notice'].append('DNS changed last 7 days!')
 
     # notice slow site
-    if INFORMATION['TTLB']:
-        if INFORMATION['TTLB'] > 1000:
-            if '5.' in INFORMATION['PHP']:
+    if INFO['TTLB']:
+        if INFO['TTLB'] > 1000:
+            if '5.' in INFO['PHP']:
                 suggestions['warning'].append('Slow site (Low PHP version)')
-            elif INFORMATION['PHP']:
+            elif INFO['PHP']:
                 suggestions['notice'].append('Slow site (Not PHP version)')
             else:
                 suggestions['notice'].append('Slow site (PHP version unknown)')
 
-    if 'cloudflare' in INFORMATION['SERVER']:
+    if 'cloudflare' in INFO['SERVER']:
         suggestions['notice'].append('Cloudflare!')
 
     # warning no host
-    if not INFORMATION['HOST'] and INFORMATION['IP']:
+    if not INFO['HOST'] and INFO['IP']:
         suggestions['notice'].append('No host found. (VPS or dedicated IP?')
 
     # no ip
-    if not INFORMATION['IP']:
+    if not INFO['IP']:
         suggestions['error'].append('No IP (No A-pointer)')
 
     # status
-    if 'ok' not in INFORMATION['STATUS'].lower():
-        suggestions['warning'].append('Status code not "OK": {}'.format(INFORMATION['STATUS']))
+    if 'ok' not in INFO['STATUS'].lower():
+        suggestions['warning'].append('Status code not "OK": {}'.format(INFO['STATUS']))
 
     # ssl
-    if INFORMATION['SSL'] == 'No':
-        if problem == 'ssl':
-            suggestions['error'].append('No SSL detected!')
-        else:
-            suggestions['notice'].append('No SSL detected!')
+    if INFO['SSL'] == 'No':
+        suggestions['warning'].append('No SSL detected!')
 
     # spf
-    if 'spf' not in INFORMATION['TXT'].lower():
-        # no SPF record
-        if problem == 'mail':
-            suggestions['error'].append('No SPF record!')
-        else:
-            suggestions['warning'].append('No SPF record!')
+    if 'spf' not in INFO['TXT'].lower():
+        suggestions['warning'].append('No SPF record!')
     else:
         # SPF record exits
-        if not any(host_ in INFORMATION['TXT'] for host_ in [INFORMATION['MX DOMAIN NAME'], host_domain(INFORMATION['MX ORGANIZATION']), host_domain(INFORMATION['MXHR'])]):
+        if not any(host_ in INFO['TXT'] for host_ in [INFO['MX DOMAIN NAME'], host_domain(INFO['MX ORGANIZATION']), host_domain(INFO['MXHR'])]):
             suggestions['warning'].append('Mail host not in SPF!')
-        if INFORMATION['IP'] not in INFORMATION['TXT']:
-            if INFORMATION['IP'] is INFORMATION['MXIP']:
+        if INFO['IP'] not in INFO['TXT']:
+            if INFO['IP'] is INFO['MXIP']:
                 # warning: ip not in spf and site and mail on same server
                 suggestions['warning'].append('IP not in SPF!')
             else:
@@ -160,9 +140,11 @@ def analyze(problem):
                 suggestions['notice'].append('IP not in SPF!')
 
     # mail
-    if INFORMATION['DOMAIN NAME HOST'] not in INFORMATION['MXHR'] and INFORMATION['MX DOMAIN NAME']:
-        suggestions['notice'].append('External mail hosted at {} ({})!'.format(INFORMATION['MX DOMAIN NAME'], INFORMATION['MX ORGANIZATION']))
-
+    try:
+        if INFO['DOMAIN NAME HOST'] not in INFO['MXHR'] and INFO['MX DOMAIN NAME']:
+            suggestions['notice'].append('External mail hosted at {} ({})!'.format(INFO['MX DOMAIN NAME'], INFO['MX ORGANIZATION']))
+    except KeyError:
+        pass
     return suggestions
 
 
@@ -185,7 +167,7 @@ def output_console(suggestions):
         'underline': '\033[4m',
         'end': '\033[0m'
     }
-    for key, value in sorted(INFORMATION.items()):
+    for key, value in sorted(INFO.items()):
         if value:
             if value is True:
                 # make True visible in output
@@ -212,14 +194,13 @@ def get_host(domain, event_ip):
     event_ip.wait()
     if DEBUG:
         print('get_host start')
-    global INFORMATION
+    global INFO
     try:
-        INFORMATION['HOST'] = socket.gethostbyaddr(INFORMATION['IP'])[0]
-        INFORMATION['DOMAIN NAME HOST'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)',
-                                                     INFORMATION['HOST'])[0]
+        INFO['HOST'] = socket.gethostbyaddr(INFO['IP'])[0]
+        INFO['DOMAIN NAME HOST'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFO['HOST'])[0]
     except socket.error:
-        INFORMATION['HOST'] = ''
-        INFORMATION['DOMAIN NAME HOST'] = ''
+        INFO['HOST'] = ''
+        INFO['DOMAIN NAME HOST'] = ''
 
     if DEBUG:
         print('get_host stop')
@@ -229,15 +210,15 @@ def get_txt(domain, event_ip):
     """Get TXT from domain name."""
     if DEBUG:
         print('get_txt start')
-    global INFORMATION
+    global INFO
     try:
-        if INFORMATION['IDN']:
-            domain_dig = INFORMATION['IDN']
+        if INFO['IDN']:
+            domain_dig = INFO['IDN']
         else:
             domain_dig = domain
-        INFORMATION['TXT'] = '\n\t\t '.join([txt.to_text() for txt in dns.resolver.query(domain_dig, 'TXT')])
+        INFO['TXT'] = '\n\t\t '.join([txt.to_text() for txt in dns.resolver.query(domain_dig, 'TXT')])
     except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
-        INFORMATION['TXT'] = ''
+        INFO['TXT'] = ''
     if DEBUG:
         print('get_txt stop')
 
@@ -246,44 +227,44 @@ def get_mx(domain, event_ip):
     """Get MX from domain name."""
     if DEBUG:
         print('get_mx start')
-    global INFORMATION
+    global INFO
     try:
         # get mx from resolver and make list and make string
-        INFORMATION['MX'] = '\n\t\t '.join([mx.to_text() for mx in dns.resolver.query(domain, 'MX')])
+        INFO['MX'] = '\n\t\t '.join([mx.to_text() for mx in dns.resolver.query(domain, 'MX')])
         # get second word that ends with a dot excluding that dot
-        INFORMATION['MX HOST'] = re.findall(r'.* (.*).', INFORMATION['MX'])[0]
-        INFORMATION['MX DOMAIN NAME'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFORMATION['MX HOST'])[0]
+        INFO['MX HOST'] = re.findall(r'.* (.*).', INFO['MX'])[0]
+        INFO['MX DOMAIN NAME'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFO['MX HOST'])[0]
     except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
-        INFORMATION['MX'] = ''
-        INFORMATION['MX HOST'] = ''
-        INFORMATION['MX DOMAIN NAME'] = ''
+        INFO['MX'] = ''
+        INFO['MX HOST'] = ''
+        INFO['MX DOMAIN NAME'] = ''
     if DEBUG:
         print('get_mx stop')
     global RES
-    if INFORMATION['MX HOST']:
+    if INFO['MX HOST']:
         try:
-            INFORMATION['MXIP'] = RES.query(INFORMATION['MX HOST'])[0].address
+            INFO['MXIP'] = RES.query(INFO['MX HOST'])[0].address
         except (dns.resolver.NXDOMAIN, dns.resolver.Timeout,
                 dns.exception.DNSException):
-            INFORMATION['MXIP'] = ''
+            INFO['MXIP'] = ''
     else:
-        INFORMATION['MXIP'] = ''
+        INFO['MXIP'] = ''
 
-    if INFORMATION['MXIP']:
+    if INFO['MXIP']:
         # get org name from MXIP
         try:
-            _whois = pythonwhois.get_whois(INFORMATION['MXIP'], True)
-            INFORMATION['MX ORGANIZATION'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', _whois['emails'][0])[0]
+            _whois = pythonwhois.get_whois(INFO['MXIP'], True)
+            INFO['MX ORGANIZATION'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', _whois['emails'][0])[0]
         except (UnicodeDecodeError, ValueError):
-            INFORMATION['MX ORGANIZATION'] = ''
+            INFO['MX ORGANIZATION'] = ''
         try:
-            INFORMATION['MXHR'] = socket.gethostbyaddr(INFORMATION['MXIP'])[0]
+            INFO['MXHR'] = socket.gethostbyaddr(INFO['MXIP'])[0]
         except socket.error:
-            INFORMATION['MXHR'] = ''
+            INFO['MXHR'] = ''
     else:
-        INFORMATION['MX ORGANIZATION'] = ''
-        INFORMATION['MXHR'] = ''
-        INFORMATION['MX ORGANIZATION'] = ''
+        INFO['MX ORGANIZATION'] = ''
+        INFO['MXHR'] = ''
+        INFO['MX ORGANIZATION'] = ''
 
 
 def get_mxorg(domain, event_ip):
@@ -292,10 +273,10 @@ def get_mxorg(domain, event_ip):
     event_ip.wait()
     if DEBUG:
         print('get_mxorg start')
-    global INFORMATION
+    global INFO
     try:
         try:
-            whois_2 = pythonwhois.get_whois(INFORMATION['IP'], True)
+            whois_2 = pythonwhois.get_whois(INFO['IP'], True)
         except (UnicodeDecodeError, ValueError,
                 pythonwhois.shared.WhoisException):
             whois_2 = False
@@ -307,18 +288,18 @@ def get_mxorg(domain, event_ip):
                 org = whois_2['emails'][0]
             except (KeyError, TypeError):
                 org = ''
-        INFORMATION['MX ORGANIZATION'] = org
+        INFO['MX ORGANIZATION'] = org
         if DEBUG:
             print('get_mxorg stop')
 
     except (dns.resolver.NXDOMAIN,
             dns.resolver.Timeout, dns.exception.DNSException):
-        INFORMATION['MX ORGANIZATION'] = ''
+        INFO['MX ORGANIZATION'] = ''
 
 
 def get_whois(domain, event_ip):
     """Get whois from domain name."""
-    global INFORMATION
+    global INFO
     if DEBUG:
         print('get_whois start {}'.format(domain))
     if domain.count('.') > 1:
@@ -328,42 +309,42 @@ def get_whois(domain, event_ip):
         if DEBUG:
             print('get_whois stop (success)')
     except UnicodeDecodeError:
-        INFORMATION['error'] = 'Python whois UnicodeDecodeError'
+        INFO['error'] = 'Python whois UnicodeDecodeError'
         if DEBUG:
             print('get_whois (exception)')
 
     try:
-        INFORMATION['TIME EXPIRE'] = _whois['expiration_date'][0].strftime("%Y-%m-%d")
+        INFO['TIME EXPIRE'] = _whois['expiration_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
-        INFORMATION['TIME EXPIRE'] = ''
+        INFO['TIME EXPIRE'] = ''
 
     try:
-        INFORMATION['TIME CREATED'] = _whois['creation_date'][0].strftime("%Y-%m-%d")
+        INFO['TIME CREATED'] = _whois['creation_date'][0].strftime("%Y-%m-%d")
     except (KeyError, TypeError):
-        INFORMATION['TIME CREATED'] = ''
+        INFO['TIME CREATED'] = ''
 
     try:
-        INFORMATION['TIME MODIFIED'] = _whois['updated_date'][0].strftime("%Y-%m-%d %H:%I:%S")
+        INFO['TIME MODIFIED'] = _whois['updated_date'][0].strftime("%Y-%m-%d %H:%I:%S")
         _detla_datetime = datetime.now() - _whois['updated_date'][0]
-        INFORMATION['TIME MOD DELTA'] = round((_detla_datetime.seconds / 3600 / 24) + float(_detla_datetime.days), 2)
+        INFO['TIME MOD DELTA'] = round((_detla_datetime.seconds / 3600 / 24) + float(_detla_datetime.days), 2)
     except (KeyError, TypeError):
-        INFORMATION['TIME MODIFIED'] = ''
-        INFORMATION['TIME MOD DELTA'] = ''
+        INFO['TIME MODIFIED'] = ''
+        INFO['TIME MOD DELTA'] = ''
 
     try:
-        INFORMATION['STATUS'] = ','.join(_whois['status'])
+        INFO['STATUS'] = ','.join(_whois['status'])
     except (KeyError, TypeError):
-        INFORMATION['STATUS'] = ''
+        INFO['STATUS'] = ''
 
     try:
-        INFORMATION['REGISTRAR'] = ' '.join(_whois['registrar'])
+        INFO['REGISTRAR'] = ' '.join(_whois['registrar'])
     except (KeyError, TypeError):
-        INFORMATION['REGISTRAR'] = ''
+        INFO['REGISTRAR'] = ''
 
     try:
-        INFORMATION['DNS'] = ' '.join(_whois['nameservers'])
+        INFO['DNS'] = ' '.join(_whois['nameservers'])
     except (KeyError, TypeError):
-        INFORMATION['DNS'] = ''
+        INFO['DNS'] = ''
 
     if DEBUG:
         print('get_whois stop')
@@ -378,14 +359,14 @@ def get_ip(domain, event_ip):
         answers = RES.query(domain)
         for rdata in answers:
             ips.append(rdata.address)
-        INFORMATION['IP'] = ips[0]
+        INFO['IP'] = ips[0]
     except dns.resolver.NXDOMAIN:
-        INFORMATION['IP'] = ''
-        INFORMATION['DOMAIN NAME'] = '{} (No such domain)'.format(
-            INFORMATION['DOMAIN NAME'])
+        INFO['IP'] = ''
+        INFO['DOMAIN NAME'] = '{} (No such domain)'.format(
+            INFO['DOMAIN NAME'])
     except (dns.resolver.NXDOMAIN, dns.resolver.Timeout,
             dns.exception.DNSException):
-        INFORMATION['IP'] = ''
+        INFO['IP'] = ''
 
     if DEBUG:
         print('get_ip stop')
@@ -399,9 +380,9 @@ def get_wpadmin(domain, event_ip):
     try:
         result = requests.get('http://{}/wp-admin'.format(domain))
         if result.status_code == 200:
-            INFORMATION['WORDPRESS'] = True
+            INFO['WORDPRESS'] = True
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
-        INFORMATION['WORDPRESS'] = False
+        INFO['WORDPRESS'] = False
     if DEBUG:
         print('get_wpadmin stop')
 
@@ -414,14 +395,16 @@ def get_statuscodes(domain, event_ip):
         html = urllib.request.urlopen('http://{}'.format(domain))
         site = lxml.html.parse(html)
         try:
-            INFORMATION['TITLE'] = site.find(".//title").text
+            INFO['TITLE'] = site.find(".//title").text
         except (AttributeError, AssertionError):
-            INFORMATION['TITLE'] = ''
+            INFO['TITLE'] = ''
+    except UnicodeDecodeError:
+        INFO['TITLE'] = ''
 
     except (urllib.error.HTTPError, ConnectionResetError,
             urllib.error.URLError):
-        INFORMATION['TITLE'] = ''
-        INFORMATION['SPEED'] = ''
+        INFO['TITLE'] = ''
+        INFO['SPEED'] = ''
     if DEBUG:
         print('get_statuscodes stop')
 
@@ -432,9 +415,9 @@ def get_ssl(domain, event_ip):
         print('get_ssl start')
     try:
         requests.get('https://{}'.format(domain), verify=True)
-        INFORMATION['SSL'] = 'Yes'
+        INFO['SSL'] = 'Yes'
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
-        INFORMATION['SSL'] = 'No'
+        INFO['SSL'] = 'No'
     if DEBUG:
         print('get_ssl stop')
 
@@ -446,11 +429,11 @@ def get_srv(domain, event_ip):
     try:
         site = requests.get('http://{}'.format(domain))
         try:
-            INFORMATION['SERVER'] = site.headers['server']
+            INFO['SERVER'] = site.headers['server']
         except KeyError:
-            INFORMATION['SERVER'] = ''
+            INFO['SERVER'] = ''
     except requests.exceptions.RequestException:
-        INFORMATION['SERVER'] = ''
+        INFO['SERVER'] = ''
     if DEBUG:
         print('get_srv stop')
 
@@ -469,12 +452,12 @@ def get_php(domain, event_ip):
             php = ''
         try:
             size = round(int(result.headers['Content-length']) / 1024)
-            INFORMATION['SIZE'] = '{} kB'.format(size)
+            INFO['SIZE'] = '{} kB'.format(size)
         except KeyError:
-            INFORMATION['SIZE'] = ''
+            INFO['SIZE'] = ''
     except requests.exceptions.RequestException:
         php = ''
-    INFORMATION['PHP'] = php
+    INFO['PHP'] = php
     if DEBUG:
         print('get_php stop')
 
@@ -490,13 +473,13 @@ def page_speed(domain, event_ip):
         resp = opener.open(request)
         # read one byte
         resp.read(1)
-        INFORMATION['TTFB'] = int(round(time.time() * 1000)) - start
+        INFO['TTFB'] = int(round(time.time() * 1000)) - start
         # read the rest
         resp.read()
-        INFORMATION['TTLB'] = int(round(time.time() * 1000)) - start
+        INFO['TTLB'] = int(round(time.time() * 1000)) - start
     except (urllib.error.HTTPError, urllib.error.URLError, http.client.HTTPException):
-        INFORMATION['TTFB'] = ''
-        INFORMATION['TTLB'] = ''
+        INFO['TTFB'] = ''
+        INFO['TTLB'] = ''
 
 
 if __name__ == "__main__":
