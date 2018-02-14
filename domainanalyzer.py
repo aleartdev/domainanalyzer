@@ -255,7 +255,7 @@ def get_mx(domain, event_ip):
         try:
             _whois = pythonwhois.get_whois(INFO['MXIP'], True)
             INFO['MX ORGANIZATION'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', _whois['emails'][0])[0]
-        except (UnicodeDecodeError, ValueError):
+        except (UnicodeDecodeError, ValueError, KeyError):
             INFO['MX ORGANIZATION'] = ''
         try:
             INFO['MXHR'] = socket.gethostbyaddr(INFO['MXIP'])[0]
