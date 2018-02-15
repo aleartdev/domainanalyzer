@@ -26,6 +26,9 @@ import urllib
 # TODO Logging instead of debug
 # TODO Class
 # TODO JSON output flag overriding printout to console
+# TODO status codes display requests.get(url, allow_redirects=False, timeout=0.5)
+# TODO combine requests ?
+# TODO get_statuscodes is named wrong
 
 
 # SETTINGS
@@ -395,6 +398,7 @@ def get_statuscodes(domain, event_ip):
         html = urllib.request.urlopen('http://{}'.format(domain))
         site = lxml.html.parse(html)
         try:
+            INFO['STATUS CODE'] = '{} / {}'.format(html.getcode(), requests.status_codes._codes[html.getcode()][0])
             INFO['TITLE'] = site.find(".//title").text
         except (AttributeError, AssertionError):
             INFO['TITLE'] = ''
@@ -404,7 +408,6 @@ def get_statuscodes(domain, event_ip):
     except (urllib.error.HTTPError, ConnectionResetError,
             urllib.error.URLError):
         INFO['TITLE'] = ''
-        INFO['SPEED'] = ''
     if DEBUG:
         print('get_statuscodes stop')
 
