@@ -381,7 +381,7 @@ def get_wpadmin(domain, event_ip):
     if DEBUG:
         print('get_wpadmin start')
     try:
-        result = requests.get('http://{}/wp-admin'.format(domain))
+        result = requests.get('http://{}/wp-admin'.format(domain), timeout=5)
         if result.status_code == 200:
             INFO['WORDPRESS'] = True
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
@@ -417,7 +417,7 @@ def get_ssl(domain, event_ip):
     if DEBUG:
         print('get_ssl start')
     try:
-        requests.get('https://{}'.format(domain), verify=True)
+        requests.get('https://{}'.format(domain), verify=True, timeout=5)
         INFO['SSL'] = 'Yes'
     except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
         INFO['SSL'] = 'No'
@@ -430,7 +430,7 @@ def get_srv(domain, event_ip):
     if DEBUG:
         print('get_srv start')
     try:
-        site = requests.get('http://{}'.format(domain))
+        site = requests.get('http://{}'.format(domain), timeout=5)
         try:
             INFO['SERVER'] = site.headers['server']
         except KeyError:
@@ -446,7 +446,7 @@ def get_php(domain, event_ip):
     if DEBUG:
         print('get_php start')
     try:
-        result = requests.get('http://{}'.format(domain))
+        result = requests.get('http://{}'.format(domain), timeout=5)
         try:
             php = result.headers['X-Powered-By']
             if 'php' not in php.lower():
