@@ -7,6 +7,7 @@
 
 * mkdir ~/domainanalyzer && cd ~/domainanalyzer
 * git clone https://github.com/freiholtz/domainanalyzer.git
-* pip3 install -r requirements.txt --no-index
-* Add this alias to your bash profile: alias domain python3 ~/domainanalyzer/domainanalyzer.py
-* Test by typing: domain davidfrehioltz.com
+* (Optional for viritual enviroment: virtualenv venv && source venv/bin/activate)
+* pip3 install -r requirements.txt
+* Add this alias to your bash_profile: alias s="python3 ~/domainanalyzer/domainanalyzer.py"
+* Test by typing: s davidfrehioltz.com

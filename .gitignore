@@ -31,6 +31,7 @@
 ######################
 setup.cfg
 .vscode/
+venv/
 
 # OS generated files #
 ######################
