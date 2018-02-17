@@ -1,13 +1,13 @@
-# domainanalyzer
+# domainanalyzer.py
 # Python script to analyze a domain name from terminal to find out things like DNS, SSL, Registrar, Title and much more.
 
-> Analyze a domain name to get data  about it and give feedbak to user in the form of data and notices , warnings, and errors.
+> The program uses threads to speed up fetching of information.
 
 > A result might look like this
 ![domainanalyzer-readme-01.png](https://github.com/freiholtz/domainanalyzer/raw/master/domainanalyzer-readme-01.png)
 
 
-## Installation
+## Installation & test run
 
 * mkdir ~/domainanalyzer && cd ~/domainanalyzer
 * git clone https://github.com/freiholtz/domainanalyzer.git
@@ -16,3 +16,8 @@
 * echo "alias s=\"source ~/domainanalyzer/venv/bin/activate && python3 ~/domainanalyzer/domainanalyzer.py\"" >> ~/.bash_profile
 * source ~/.bash_profile
 * s davidfrehioltz.com
+
+## Fix Python Whois encoding problems
+
+* Implement this fix on net.py https://github.com/joepie91/python-whois/pull/59/files?diff=unified
+* To locate net.py run this command: find ~/domainanalyzer -name "net.py"

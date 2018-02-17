@@ -38,6 +38,7 @@ DEBUG = False
 
 # Information about the domain is asyncly gatherd here
 INFO = {}
+SUGGESTIONS = {'error': [], 'warning': [], 'notice': []}
 
 
 def main():
@@ -45,7 +46,8 @@ def main():
     _domain_ = get_argument(1, None)
     parse_search(_domain_)
     get_information()
-    output_console(analyze())
+    analyze()
+    output_console()
 
 
 def get_argument(index, return_except):
@@ -90,65 +92,63 @@ def get_information():
 
 def analyze():
     """Analyze domain."""
-    suggestions = {'error': [], 'warning': [], 'notice': []}
 
     if INFO['TIME MODIFIED']:
         if INFO['TIME MOD DELTA'] < 2:
-            suggestions['warning'].append('DNS changed last 48 hours!')
+            SUGGESTIONS['warning'].append('DNS changed last 48 hours!')
         elif INFO['TIME MOD DELTA'] < 7:
-            suggestions['notice'].append('DNS changed last 7 days!')
+            SUGGESTIONS['notice'].append('DNS changed last 7 days!')
 
     # notice slow site
     if INFO['TTLB']:
         if INFO['TTLB'] > 1000:
             if '5.' in INFO['PHP']:
-                suggestions['warning'].append('Slow site (Low PHP version)')
+                SUGGESTIONS['warning'].append('Slow site (Low PHP version)')
             elif INFO['PHP']:
-                suggestions['notice'].append('Slow site (Not PHP version)')
+                SUGGESTIONS['notice'].append('Slow site (Not PHP version)')
             else:
-                suggestions['notice'].append('Slow site (PHP version unknown)')
+                SUGGESTIONS['notice'].append('Slow site (PHP version unknown)')
 
     if 'cloudflare' in INFO['SERVER']:
-        suggestions['notice'].append('Cloudflare!')
+        SUGGESTIONS['notice'].append('Cloudflare!')
 
     # warning no host
     if not INFO['HOST'] and INFO['IP']:
-        suggestions['notice'].append('No host found. (VPS or dedicated IP?')
+        SUGGESTIONS['notice'].append('No host found. (VPS or dedicated IP?')
 
     # no ip
     if not INFO['IP']:
-        suggestions['error'].append('No IP (No A-pointer)')
+        SUGGESTIONS['error'].append('No IP (No A-pointer)')
 
     # status
     if 'ok' not in INFO['STATUS'].lower():
-        suggestions['warning'].append('Status code not "OK": {}'.format(INFO['STATUS']))
+        SUGGESTIONS['warning'].append('Status code not "OK": {}'.format(INFO['STATUS']))
 
     # ssl
     if INFO['SSL'] == 'No':
-        suggestions['warning'].append('No SSL detected!')
+        SUGGESTIONS['warning'].append('No SSL detected!')
 
     # spf
     if 'spf' not in INFO['TXT'].lower():
-        suggestions['warning'].append('No SPF record!')
+        SUGGESTIONS['warning'].append('No SPF record!')
     else:
         # SPF record exits
         if not any(host_ in INFO['TXT'] for host_ in [INFO['MX DOMAIN NAME'], host_domain(INFO['MX ORGANIZATION']), host_domain(INFO['MXHR'])]):
-            suggestions['warning'].append('Mail host not in SPF!')
+            SUGGESTIONS['warning'].append('Mail host not in SPF!')
         if INFO['IP'] not in INFO['TXT']:
             if INFO['IP'] is INFO['MXIP']:
                 # warning: ip not in spf and site and mail on same server
-                suggestions['warning'].append('IP not in SPF!')
+                SUGGESTIONS['warning'].append('IP not in SPF!')
             else:
                 # notice: ip not in spf and site and mail on different server
-                suggestions['notice'].append('IP not in SPF!')
+                SUGGESTIONS['notice'].append('IP not in SPF!')
 
     # mail
     try:
         if INFO['DOMAIN NAME HOST'] not in INFO['MXHR'] and INFO['MX DOMAIN NAME']:
-            suggestions['notice'].append('External mail hosted at {} ({})!'.format(INFO['MX DOMAIN NAME'], INFO['MX ORGANIZATION']))
+            SUGGESTIONS['notice'].append('External mail hosted at {} ({})!'.format(INFO['MX DOMAIN NAME'], INFO['MX ORGANIZATION']))
     except KeyError:
         pass
-    return suggestions
 
 
 def host_domain(host):
@@ -156,7 +156,7 @@ def host_domain(host):
     return '.'.join(host.split('.')[-2:])
 
 
-def output_console(suggestions):
+def output_console():
     """Output suggestions to console."""
     color = {
         'purple': '\033[95m',
@@ -180,13 +180,13 @@ def output_console(suggestions):
         else:
             print('{}{}{}{}'.format(color['bold'],
                                     key, color['end'], ''))
-    for error_msg in suggestions['error']:
+    for error_msg in SUGGESTIONS['error']:
         print('Error! {}{}{}{}'.format(color['bold'], color['red'],
                                        error_msg, color['end']))
-    for warning_msg in suggestions['warning']:
+    for warning_msg in SUGGESTIONS['warning']:
         print('Warning! {}{}{}{}'.format(color['bold'], color['yellow'],
                                          warning_msg, color['end']))
-    for notice_msg in suggestions['notice']:
+    for notice_msg in SUGGESTIONS['notice']:
         print('Notice! {}{}{}{}'.format(color['bold'], color['darkcyan'],
                                         notice_msg, color['end']))
 
@@ -312,7 +312,8 @@ def get_whois(domain, event_ip):
         if DEBUG:
             print('get_whois stop (success)')
     except UnicodeDecodeError:
-        INFO['error'] = 'Python whois UnicodeDecodeError'
+        SUGGESTIONS['error'].append('Python whois UnicodeDecodeError. (Implement fix in readme.md https://github.com/freiholtz/domainanalyzer/blob/master/README.md)')
+        _whois = []
         if DEBUG:
             print('get_whois (exception)')
 
