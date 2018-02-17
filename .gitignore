@@ -30,7 +30,11 @@
 # VSCode #
 ######################
 setup.cfg
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 venv/
 
 # OS generated files #
