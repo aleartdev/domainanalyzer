@@ -12,3 +12,6 @@
 * Add this alias to your bash_profile: alias s="python3 ~/domainanalyzer/domainanalyzer.py"
 * OR add this alias if you use viritualenv: alias s="source ~/domainanalyzer/venv/bin/activate && python3 ~/domainanalyzer/domainanalyzer.py"
 * Test by typing: s davidfrehioltz.com
+
+Result:
+![domainanalyzer-readme-01.png](https://github.com/freiholtz/domainanalyzer/raw/master/domainanalyzer-readme-01.png)
