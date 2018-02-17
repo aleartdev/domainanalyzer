@@ -10,4 +10,5 @@
 * (Optional for viritual enviroment: virtualenv venv && source venv/bin/activate)
 * pip3 install -r requirements.txt
 * Add this alias to your bash_profile: alias s="python3 ~/domainanalyzer/domainanalyzer.py"
+* OR add this alias if you use viritualenv: alias s="source ~/domainanalyzer/venv/bin/activate && python3 ~/domainanalyzer/domainanalyzer.py"
 * Test by typing: s davidfrehioltz.com
