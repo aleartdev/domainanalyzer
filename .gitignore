@@ -26,6 +26,8 @@
 *.log
 *.sql
 *.sqlite
+.pytest_cache/*
+.pytest_cache/
 
 # VSCode #
 ######################
