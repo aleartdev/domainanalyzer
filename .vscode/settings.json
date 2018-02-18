@@ -1,7 +1,0 @@
-{
-    "python.linting.enabled": true,
-    "editor.rulers": [
-        80
-    ],
-    "python.pythonPath": "${workspaceFolder}/venv/bin/python"
-}
