@@ -20,10 +20,7 @@ import urllib
 # you need to implement this fix on net.py in pythonwhois
 # https://github.com/joepie91/python-whois/pull/59
 
-
-
 # TODO Docker
-# TODO Unittest https://docs.python.org/3/library/unittest.html
 # TODO Static type checking mypy http://mypy-lang.org/examples.html
 # TODO Logging instead of debug
 # TODO Class
