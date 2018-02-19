@@ -21,6 +21,10 @@ Clone the repository
 ```
 git clone https://github.com/freiholtz/domainanalyzer.git
 ```
+Install virtualenv if not on your enviroment
+```
+pip3 install virtualenv
+```
 Careate and activate a virtual enviroment so you dont litter your computer
 ```
 virtualenv venv && source venv/bin/activate
@@ -45,7 +49,7 @@ s davidfrehioltz.com
 ## Fix Python Whois encoding problems
 
 * Implement this fix on net.py https://github.com/joepie91/python-whois/pull/59/files?diff=unified
-* To locate net.py run this command: 
+* To locate net.py run this command:
 ```
 find ~/domainanalyzer -name "net.py"
 ```

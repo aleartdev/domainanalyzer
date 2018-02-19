@@ -315,6 +315,9 @@ def get_whois(domain, event_ip):
         _whois = []
         if DEBUG:
             print('get_whois (exception)')
+    except pythonwhois.shared.WhoisException as e:
+        SUGGESTIONS['error'].append('WhoisException - {}'.format(e))
+        _whois = []
 
     try:
         INFO['TIME EXPIRE'] = _whois['expiration_date'][0].strftime("%Y-%m-%d")
@@ -365,8 +368,7 @@ def get_ip(domain, event_ip):
         INFO['IP'] = ips[0]
     except dns.resolver.NXDOMAIN:
         INFO['IP'] = ''
-        INFO['DOMAIN NAME'] = '{} (No such domain)'.format(
-            INFO['DOMAIN NAME'])
+        INFO['DOMAIN NAME'] = ''
     except (dns.resolver.NXDOMAIN, dns.resolver.Timeout,
             dns.exception.DNSException):
         INFO['IP'] = ''
