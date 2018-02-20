@@ -29,7 +29,6 @@ import urllib
 # TODO combine requests ?
 # TODO get_statuscodes is named wrong
 
-
 # SETTINGS
 RES = resolver.Resolver()
 RES.nameservers = ['8.8.8.8']
