@@ -385,7 +385,7 @@ def get_wpadmin(domain, event_ip):
         result = requests.get('http://{}/wp-admin'.format(domain), timeout=5)
         if result.status_code == 200:
             INFO['WORDPRESS'] = True
-    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout):
         INFO['WORDPRESS'] = False
     if DEBUG:
         print('get_wpadmin stop')

@@ -53,3 +53,5 @@ s davidfrehioltz.com
 ```
 find ~/domainanalyzer -name "net.py"
 ```
+You might eperince problem after editing due to spaces/tabs conflict.
+Default indentation is tabs in the file but you probably have spaces in your IDE
