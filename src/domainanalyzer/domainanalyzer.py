@@ -33,6 +33,7 @@ import urllib
 RES = resolver.Resolver()
 RES.nameservers = ['8.8.8.8']
 DEBUG = False
+EVENT_IP = threading.Event()
 
 # Information about the domain is asyncly gatherd here
 INFO = {}
@@ -73,13 +74,12 @@ def parse_search(search):
 
 def get_information():
     """Get domain information and split work in to threads."""
-    event_ip = threading.Event()
     functions = [get_whois, get_wpadmin, get_statuscodes, page_speed, get_ssl,
-                 get_srv, get_php, get_ip, get_host, get_mx, get_txt]
+                 get_srv, get_php, get_ip, get_host, get_mx, get_txt, get_ns]
     threads_list = list()
     for function in functions:
         threads_list.append(Thread(name=function, target=function,
-                            args=(INFO['DOMAIN NAME'], event_ip)))
+                            args=(INFO['DOMAIN NAME'],)))
 
     for thread in threads_list:
         thread.start()
@@ -90,7 +90,6 @@ def get_information():
 
 def analyze():
     """Analyze domain."""
-
     if INFO['TIME MODIFIED']:
         if INFO['TIME MOD DELTA'] < 2:
             SUGGESTIONS['warning'].append('DNS changed last 48 hours!')
@@ -112,7 +111,7 @@ def analyze():
 
     # warning no host
     if not INFO['HOST'] and INFO['IP']:
-        SUGGESTIONS['notice'].append('No host found. (VPS or dedicated IP?')
+        SUGGESTIONS['notice'].append('No host found for IP. (VPS/Dedicated IP/CLoudFlare)')
 
     # no ip
     if not INFO['IP']:
@@ -189,10 +188,10 @@ def output_console():
                                         notice_msg, color['end']))
 
 
-def get_host(domain, event_ip):
+def get_host(domain):
     """Get host from domain name."""
     # we must wait for ip to be avalible from other thread
-    event_ip.wait()
+    EVENT_IP.wait()
     if DEBUG:
         print('get_host start')
     global INFO
@@ -207,7 +206,7 @@ def get_host(domain, event_ip):
         print('get_host stop')
 
 
-def get_txt(domain, event_ip):
+def get_txt(domain):
     """Get TXT from domain name."""
     if DEBUG:
         print('get_txt start')
@@ -224,7 +223,24 @@ def get_txt(domain, event_ip):
         print('get_txt stop')
 
 
-def get_mx(domain, event_ip):
+def get_ns(domain):
+    """Get NS from domain name."""
+    if DEBUG:
+        print('get_ns start')
+    global INFO
+    try:
+        if INFO['IDN']:
+            domain_dig = INFO['IDN']
+        else:
+            domain_dig = domain
+        INFO['NS'] = '\n\t\t '.join([ns.to_text() for ns in dns.resolver.query(domain_dig, 'NS')])
+    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+        INFO['NS'] = ''
+    if DEBUG:
+        print('get_ns stop')
+
+
+def get_mx(domain):
     """Get MX from domain name."""
     if DEBUG:
         print('get_mx start')
@@ -268,10 +284,10 @@ def get_mx(domain, event_ip):
         INFO['MX ORGANIZATION'] = ''
 
 
-def get_mxorg(domain, event_ip):
+def get_mxorg(domain):
     """Get organization from MX IP."""
     # we must wait for ip to be avalible from other thread
-    event_ip.wait()
+    EVENT_IP.wait()
     if DEBUG:
         print('get_mxorg start')
     global INFO
@@ -298,7 +314,7 @@ def get_mxorg(domain, event_ip):
         INFO['MX ORGANIZATION'] = ''
 
 
-def get_whois(domain, event_ip):
+def get_whois(domain):
     """Get whois from domain name."""
     global INFO
     if DEBUG:
@@ -346,16 +362,11 @@ def get_whois(domain, event_ip):
     except (KeyError, TypeError):
         INFO['REGISTRAR'] = ''
 
-    try:
-        INFO['DNS'] = ' '.join(_whois['nameservers'])
-    except (KeyError, TypeError):
-        INFO['DNS'] = ''
-
     if DEBUG:
         print('get_whois stop')
 
 
-def get_ip(domain, event_ip):
+def get_ip(domain):
     """Get whois from domain name."""
     if DEBUG:
         print('get_ip start {}'.format(domain))
@@ -374,10 +385,10 @@ def get_ip(domain, event_ip):
 
     if DEBUG:
         print('get_ip stop')
-    event_ip.set()
+    EVENT_IP.set()
 
 
-def get_wpadmin(domain, event_ip):
+def get_wpadmin(domain):
     """Get Wordpress admin login status code."""
     if DEBUG:
         print('get_wpadmin start')
@@ -391,7 +402,7 @@ def get_wpadmin(domain, event_ip):
         print('get_wpadmin stop')
 
 
-def get_statuscodes(domain, event_ip):
+def get_statuscodes(domain):
     """Get main site status code."""
     if DEBUG:
         print('get_statuscodes start')
@@ -413,7 +424,7 @@ def get_statuscodes(domain, event_ip):
         print('get_statuscodes stop')
 
 
-def get_ssl(domain, event_ip):
+def get_ssl(domain):
     """Get SSL cert."""
     if DEBUG:
         print('get_ssl start')
@@ -426,7 +437,7 @@ def get_ssl(domain, event_ip):
         print('get_ssl stop')
 
 
-def get_srv(domain, event_ip):
+def get_srv(domain):
     """Get server information."""
     if DEBUG:
         print('get_srv start')
@@ -442,7 +453,7 @@ def get_srv(domain, event_ip):
         print('get_srv stop')
 
 
-def get_php(domain, event_ip):
+def get_php(domain):
     """Get php version."""
     if DEBUG:
         print('get_php start')
@@ -466,7 +477,7 @@ def get_php(domain, event_ip):
         print('get_php stop')
 
 
-def page_speed(domain, event_ip):
+def page_speed(domain):
     """Get ttfb and ttlb from url."""
     try:
         url = 'http://{}'.format(domain)
