@@ -15,6 +15,7 @@ from threading import Thread
 import threading
 import time
 import urllib
+import ssl
 
 # If you want pwhois to handle non standard characters in result
 # you need to implement this fix on net.py in pythonwhois
@@ -414,11 +415,7 @@ def get_statuscodes(domain):
             INFO['TITLE'] = site.find(".//title").text
         except (AttributeError, AssertionError):
             INFO['TITLE'] = ''
-    except UnicodeDecodeError:
-        INFO['TITLE'] = ''
-
-    except (urllib.error.HTTPError, ConnectionResetError,
-            urllib.error.URLError):
+    except (UnicodeDecodeError, urllib.error.HTTPError, ConnectionResetError, urllib.error.URLError, ssl.CertificateError):
         INFO['TITLE'] = ''
     if DEBUG:
         print('get_statuscodes stop')
@@ -431,7 +428,7 @@ def get_ssl(domain):
     try:
         requests.get('https://{}'.format(domain), verify=True, timeout=5)
         INFO['SSL'] = 'Yes'
-    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError, requests.exceptions.Timeout):
         INFO['SSL'] = 'No'
     if DEBUG:
         print('get_ssl stop')
