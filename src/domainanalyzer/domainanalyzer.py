@@ -492,7 +492,7 @@ def page_speed(domain):
         # read the rest
         resp.read()
         INFO['TTLB'] = int(round(time.time() * 1000)) - start
-    except (urllib.error.HTTPError, urllib.error.URLError, http.client.HTTPException):
+    except (urllib.error.HTTPError, urllib.error.URLError, http.client.HTTPException, ssl.CertificateError):
         INFO['TTFB'] = ''
         INFO['TTLB'] = ''
 
