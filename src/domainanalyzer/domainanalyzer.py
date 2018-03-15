@@ -218,7 +218,7 @@ def get_txt(domain):
         else:
             domain_dig = domain
         INFO['TXT'] = '\n\t\t '.join([txt.to_text() for txt in dns.resolver.query(domain_dig, 'TXT')])
-    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
         INFO['TXT'] = ''
     if DEBUG:
         print('get_txt stop')
@@ -235,7 +235,7 @@ def get_ns(domain):
         else:
             domain_dig = domain
         INFO['NS'] = '\n\t\t '.join([ns.to_text() for ns in dns.resolver.query(domain_dig, 'NS')])
-    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
         INFO['NS'] = ''
     if DEBUG:
         print('get_ns stop')
@@ -252,7 +252,7 @@ def get_mx(domain):
         # get second word that ends with a dot excluding that dot
         INFO['MX HOST'] = re.findall(r'.* (.*).', INFO['MX'])[0]
         INFO['MX DOMAIN NAME'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFO['MX HOST'])[0]
-    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
         INFO['MX'] = ''
         INFO['MX HOST'] = ''
         INFO['MX DOMAIN NAME'] = ''
@@ -263,7 +263,7 @@ def get_mx(domain):
         try:
             INFO['MXIP'] = RES.query(INFO['MX HOST'])[0].address
         except (dns.resolver.NXDOMAIN, dns.resolver.Timeout,
-                dns.exception.DNSException):
+                dns.exception.DNSException, dns.resolver.NoNameservers):
             INFO['MXIP'] = ''
     else:
         INFO['MXIP'] = ''
