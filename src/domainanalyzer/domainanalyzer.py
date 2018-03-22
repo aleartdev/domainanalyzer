@@ -428,7 +428,7 @@ def get_ssl(domain):
     try:
         requests.get('https://{}'.format(domain), verify=True, timeout=5)
         INFO['SSL'] = 'Yes'
-    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.TooManyRedirects):
         INFO['SSL'] = 'No'
     if DEBUG:
         print('get_ssl stop')
