@@ -29,6 +29,7 @@ import ssl
 # TODO status codes display requests.get(url, allow_redirects=False, timeout=0.5)
 # TODO combine requests ?
 # TODO get_statuscodes is named wrong
+# TODO Where exception , AttributeError this is temporary and should prompt the user to try again
 
 # SETTINGS
 RES = resolver.Resolver()
@@ -218,7 +219,7 @@ def get_txt(domain):
         else:
             domain_dig = domain
         INFO['TXT'] = '\n\t\t '.join([txt.to_text() for txt in dns.resolver.query(domain_dig, 'TXT')])
-    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
+    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers, AttributeError):
         INFO['TXT'] = ''
     if DEBUG:
         print('get_txt stop')
@@ -252,7 +253,7 @@ def get_mx(domain):
         # get second word that ends with a dot excluding that dot
         INFO['MX HOST'] = re.findall(r'.* (.*).', INFO['MX'])[0]
         INFO['MX DOMAIN NAME'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', INFO['MX HOST'])[0]
-    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers):
+    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers, AttributeError):
         INFO['MX'] = ''
         INFO['MX HOST'] = ''
         INFO['MX DOMAIN NAME'] = ''
@@ -273,7 +274,7 @@ def get_mx(domain):
         try:
             _whois = pythonwhois.get_whois(INFO['MXIP'], True)
             INFO['MX ORGANIZATION'] = re.findall(r'([a-zA-Z0-9_-]*\.[a-zA-Z0-9_]*$)', _whois['emails'][0])[0]
-        except (UnicodeDecodeError, ValueError, KeyError):
+        except (UnicodeDecodeError, ValueError, KeyError, AttributeError):
             INFO['MX ORGANIZATION'] = ''
         try:
             INFO['MXHR'] = socket.gethostbyaddr(INFO['MXIP'])[0]
