@@ -59,3 +59,6 @@ find ~/ -name "net.py"
 ```
 You might experince problems after editing due to spaces/tabs conflict.
 Default indentation is tabs in the file but you probably have spaces in your IDE
+
+## I don't have PIP3 on my shared hosting
+* Check with your hosting if they have a official way of using PIP3. Mine for example requires you to create a Python app in the control panel to get a venv preinstalld with PIP3.
