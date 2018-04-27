@@ -219,7 +219,7 @@ def get_txt(domain):
         else:
             domain_dig = domain
         INFO['TXT'] = '\n\t\t '.join([txt.to_text() for txt in dns.resolver.query(domain_dig, 'TXT')])
-    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers, AttributeError):
+    except (socket.error, dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.resolver.NoNameservers, AttributeError, dns.exception.Timeout):
         INFO['TXT'] = ''
     if DEBUG:
         print('get_txt stop')
