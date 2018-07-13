@@ -17,7 +17,7 @@ https://store.docker.com/search?type=edition&offering=community
 
 Step 2: Run this command in the terminal app to get the source file and create a docker image and a shortcut dommand
 ```
-cd && git clone https://github.com/freiholtz/domainanalyzer.git && ./install && echo "alias s=\"docker run freiholtz/domainanalzer \"" >> ~/.bash_profile && source ~/.bash_profile
+cd && git clone https://github.com/freiholtz/domainanalyzer.git && cd domainanalyzer && ./install && echo "alias s=\"docker run freiholtz/domainanalzer \"" >> ~/.bash_profile && source ~/.bash_profile
 ```
 
 Step 3: Use the alias command and a domain name to get the information
