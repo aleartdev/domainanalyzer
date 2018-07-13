@@ -1,12 +1,6 @@
 # Domainanalyzer
-# Dockerized Python script that analyzes a domain name and fetchs all relevant information for hosting support
-
-> Uses threads to speed up fetching of information.
-
-A result might look like this
-
-![domainanalyzer-readme-01.png](https://github.com/freiholtz/domainanalyzer/raw/master/docs/domainanalyzer-readme-01.png)
-
+> Dockerized Python script that analyzes a domain name and fetchs all relevant information for hosting support
+> Multi threaded fetching makes it super-fast.
 
 ## Installation instructions
 
@@ -20,9 +14,21 @@ Step 2: Run this command in the terminal app to get the source file and create a
 cd && git clone https://github.com/freiholtz/domainanalyzer.git && cd domainanalyzer && ./install && echo "alias s=\"docker run --rm freiholtz/domainanalzer \"" >> ~/.bash_profile && source ~/.bash_profile && s davidfreiholtz.com
 ```
 
-# DONE! Use S and a domainname to do a search!
+## Usage
 
-## Fix Python Whois encoding problems with non-standard-chars domains
+From the terminal type s and the domain you want to analyze.
+```
+s davidfreiholtz.com
+```
+
+A result might look like this
+
+![domainanalyzer-readme-01.png](https://github.com/freiholtz/domainanalyzer/raw/master/docs/domainanalyzer-readme-01.png)
+
+
+## If you get errorrs on domains with with non-standard-chars the solution might be..
+
+> This is for advanced users
 
 * Implement this fix on net.py https://github.com/joepie91/python-whois/pull/59/files?diff=unified
 * To locate net.py run this command (inside your python enviroment in the docker container):
