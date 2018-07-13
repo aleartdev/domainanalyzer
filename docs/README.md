@@ -10,6 +10,8 @@ A result might look like this
 
 ## Installation instructions
 
+Requires: Docker (Install from here https://store.docker.com/search?type=edition&offering=community )
+
 Step 1: Clone the repository
 ```
 cd && git clone https://github.com/freiholtz/domainanalyzer.git
