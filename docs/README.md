@@ -19,7 +19,7 @@ cd && git clone https://github.com/freiholtz/domainanalyzer.git
 
 Step 2: Install alias to start docker container to your .bash_profile for ease of use
 ```
-echo "alias domainanalyzer=\".~/domainanalyzer/start\"" >> ~/.bash_profile && source ~/.bash_profile
+echo "alias domainanalyzer=\"bash ~/domainanalyzer/start\"" >> ~/.bash_profile && source ~/.bash_profile
 ```
 
 Example use inside docker container
