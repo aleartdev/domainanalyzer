@@ -17,7 +17,7 @@ https://store.docker.com/search?type=edition&offering=community
 
 Step 2: Run this command in the terminal app to get the source file and create a docker image and a shortcut dommand
 ```
-cd && git clone https://github.com/freiholtz/domainanalyzer.git && cd domainanalyzer && ./install && echo "alias s=\"docker run freiholtz/domainanalzer \"" >> ~/.bash_profile && source ~/.bash_profile && s davidfreiholtz.com
+cd && git clone https://github.com/freiholtz/domainanalyzer.git && cd domainanalyzer && ./install && echo "alias s=\"docker run --rm freiholtz/domainanalzer \"" >> ~/.bash_profile && source ~/.bash_profile && s davidfreiholtz.com
 ```
 
 # DONE! Use S and a domainname to do a search!
