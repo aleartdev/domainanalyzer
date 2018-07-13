@@ -1,10 +1,5 @@
-FROM python:3
-
-WORKDIR ~/Documents/GitHub/domainanalyzer/
-
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-
+FROM python:3.6.6
+WORKDIR /usr/src/app
 COPY . .
-
-CMD [ "python", "./domainanalyzer.py" ]
+RUN pip3 install -r requirements.txt
+RUN echo "alias s=\"python3 /usr/src/app/src/domainanalyzer/domainanalyzer.py\"" >> /root/.profile

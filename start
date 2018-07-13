@@ -1,0 +1,4 @@
+docker stop domainanalyzer
+docker rm domainanalyzer
+docker build -t freiholtz/domainanalzer .
+docker run --name domainanalyzer -it freiholtz/domainanalzer sh -l
