@@ -1,5 +1,5 @@
 # Domainanalyzer
-# Dockerized Python script that analyzes a domain name and fetchs all relevant information relevant for hosting support
+# Dockerized Python script that analyzes a domain name and fetchs all relevant information for hosting support
 
 > Uses threads to speed up fetching of information.
 
