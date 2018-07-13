@@ -1,7 +1,7 @@
 # Domainanalyzer
-# Python script to analyze a domain name and fetch all relevant information for trouble shooting.
+# Dockerized Python script that analyzes a domain name and fetchs all relevant information relevant for hosting support
 
-> The script uses threads to speed up fetching of information.
+> Uses threads to speed up fetching of information.
 
 A result might look like this
 
@@ -10,24 +10,26 @@ A result might look like this
 
 ## Installation instructions
 
-Requires: Docker (Install from here https://store.docker.com/search?type=edition&offering=community )
-
-Step 1: Clone the repository
+Step 1: Install Docker if you don't have it
 ```
-cd && git clone https://github.com/freiholtz/domainanalyzer.git
+https://store.docker.com/search?type=edition&offering=community
 ```
 
-Step 2: Install alias to start docker container to your .bash_profile for ease of use
+Step 2: Run this command in the terminal app to get the source file and create a docker image and a shortcut dommand
 ```
-echo "alias domainanalyzer=\"bash ~/domainanalyzer/start\"" >> ~/.bash_profile && source ~/.bash_profile
+cd && git clone https://github.com/freiholtz/domainanalyzer.git && ./install && echo "alias s=\"docker run freiholtz/domainanalzer \"" >> ~/.bash_profile && source ~/.bash_profile
 ```
 
-Example use inside docker container
+Step 3: Use the alias command and a domain name to get the information
 ```
 s davidfrehioltz.com
 ```
 
+# DONE!
+
 ## Fix Python Whois encoding problems
+
+This fix might not be compatible with dockerization
 
 * Implement this fix on net.py https://github.com/joepie91/python-whois/pull/59/files?diff=unified
 * To locate net.py run this command:
