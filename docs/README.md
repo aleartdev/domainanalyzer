@@ -9,9 +9,9 @@ Step 1: Install Docker if you don't have it
 https://store.docker.com/search?type=edition&offering=community
 ```
 
-Step 2: Run this command in the terminal app to get the source file and create a docker image and a shortcut dommand
+Step 2: Run this terminal command in the folder you want to save the app in
 ```
-cd && git clone https://github.com/freiholtz/domainanalyzer.git && cd domainanalyzer && ./install && echo "alias s=\"docker run --rm freiholtz/domainanalzer \"" >> ~/.bash_profile && source ~/.bash_profile && s davidfreiholtz.com
+docker run --rm -it -v ${PWD}:/project --workdir /project alpine/git clone https://github.com/freiholtz/domainanalyzer.git && ./domainanalyzer/install && echo "alias s=\"docker run --rm freiholtz/domainanalzer \"" >> ~/.bash_profile && source ~/.bash_profile && s davidfreiholtz.com
 ```
 
 ## Usage
