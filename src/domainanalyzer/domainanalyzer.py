@@ -431,7 +431,6 @@ def get_whois(domain):
         INFO["TIME CREATED"] = ""
 
     try:
-        print("test")
         INFO["TIME MODIFIED"] = _whois["updated_date"][0].strftime(
             "%Y-%m-%d %H:%I:%S"
         )
