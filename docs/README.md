@@ -8,15 +8,19 @@ Step 1: Install Docker if you don't have it
 ```
 https://store.docker.com/search?type=edition&offering=community
 ```
-
-Step 2: Run this terminal command in the folder you want to save the app in
+Step 2: Use bash for this
 ```
-docker run --rm -it -v ${PWD}:/project --workdir /project alpine/git clone https://github.com/freiholtz/domainanalyzer.git && ./domainanalyzer/install && echo "alias s=\"docker run --rm freiholtz/domainanalzer \"" >> ~/.bash_profile && source ~/.bash_profile && s davidfreiholtz.com
+bash
+```
+
+Step 3: Run this terminal command in the folder you want to save the app in
+```
+docker run --rm -it -v ${PWD}:/project --workdir /project alpine/git clone https://github.com/freiholtz/domainanalyzer.git ; cd domainanalyzer ; ./install ;echo "Run with: docker run --rm freiholtz/domainanalzer davidfreiholtz.com"
 ```
 
 ## Usage
 
-From the terminal type s and the domain you want to analyze.
+If you crate a alias/abbrivation s for the run command you can analyze a domain like this.
 ```
 s davidfreiholtz.com
 ```
