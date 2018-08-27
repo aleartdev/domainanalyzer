@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 docker stop domainanalyzer
 docker rm domainanalyzer
 docker build -t freiholtz/domainanalzer .
