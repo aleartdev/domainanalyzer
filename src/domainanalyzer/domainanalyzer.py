@@ -29,7 +29,7 @@ import ssl
 
 # SETTINGS
 RES = resolver.Resolver()
-RES.nameservers = ["8.8.8.8"]
+RES.nameservers = ["1.1.1.1"]
 DEBUG = False
 EVENT_IP = threading.Event()
 
@@ -105,9 +105,9 @@ def analyze():
     """Analyze domain."""
     if INFO["TIME MODIFIED"]:
         if INFO["TIME MOD DELTA"] < 2:
-            SUGGESTIONS["warning"].append("DNS changed last 48 hours!")
+            SUGGESTIONS["warning"].append("DNS changed last in the 48 hours!")
         elif INFO["TIME MOD DELTA"] < 7:
-            SUGGESTIONS["notice"].append("DNS changed last 7 days!")
+            SUGGESTIONS["notice"].append("DNS changed last in the 7 days!")
 
     # notice slow site
     if INFO["TTLB"]:
@@ -125,7 +125,7 @@ def analyze():
     # warning no host
     if not INFO["HOST"] and INFO["IP"]:
         SUGGESTIONS["notice"].append(
-            "No host found for IP. (VPS/Dedicated IP/CLoudFlare)"
+            "No host found for IP. (VPS/Dedicated IP/CloudFlare)"
         )
 
     # no ip
